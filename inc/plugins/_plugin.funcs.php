@@ -509,7 +509,8 @@ function autoform_display_field( $parname, $parmeta, & $Form, $set_type, $Obj, $
 
 		case 'password':
 			$params['type'] = 'password'; // same as text input, but type=password
-
+		
+		case 'number':
 		case 'float':
 		case 'integer':
 		case 'text':
@@ -535,6 +536,8 @@ function autoform_display_field( $parname, $parmeta, & $Form, $set_type, $Obj, $
 			{ // This param is used to hide a label
 				$params['hide_label'] = $parmeta['hide_label'];
 			}
+			
+			if( $parmeta['type'] == 'number' ){ $params['type'] = 'number';}
 
 			$Form->text_input( $input_name, $set_value, $size, $set_label, '', $params ); // TEMP: Note already in params
 			break;
