@@ -84,32 +84,32 @@ function load_class( $class_path, $classname, $relative_to = 'inc' )
 						$sub_path = preg_replace( ':^'.preg_quote(  $plugins_path, ':' ).':', '', $l_trace['file'] );
 						$path_parts = explode( '/', $sub_path );
 						$plugin_folder = isset($path_parts[0]) ? $path_parts[0] : NULL;
-						$source = trailing_slash( $plugins_path.$plugin_folder ).$class_path;
+						$source = trailing_slash( $plugins_path.$plugin_folder );
 						break;
 					}
 				}
+					global $Debuglog;
 					// This is a class loader, make sure $Debuglog exists already
 					if( ! empty( $Debuglog ) )
 					{
 						if( ! file_exists( $source ) )
 						{
-							$source = trailing_slash( $plugins_path.$plugin_folder ).$class_path;
-							$Debuglog->add( sprintf( T_('file [%s] does not exist'), $source ), 'Load class' );
+							$Debuglog->add( sprintf( T_('file [%s] does not exist'), $source.$class_path ), 'Load class' );
 
 							// Last try
-							$source = $plugins_path.$class_path;
+							$source = $plugins_path;
 
 							if( ! file_exists( $source ) )
 							{
-								$Debuglog->add( sprintf( T_('file [%s] does not exist'), $source ), 'Load class' );
+								$Debuglog->add( sprintf( T_('file [%s] does not exist'), $source.$class_path ), 'Load class' );
 								break;
 							}
 
 						}
 						else
 						{
-							$Debuglog->add( sprintf( T_('Class [%s] load is requested from plugin %s'), $classname, $source_folder ), 'Load class' );
-							$Debuglog->add( sprintf( T_('Class [%s]: %s'), $classname, $source ), 'Load class' );
+							$Debuglog->add( sprintf( T_('Class [%s] load is requested from plugin [%s]'), $classname, $plugin_folder ), 'Load class' );
+							$Debuglog->add( sprintf( T_('Class [%s]: %s'), $classname, $source.$class_path ), 'Load class' );
 						}
 					}
 
@@ -130,5 +130,6 @@ function load_class( $class_path, $classname, $relative_to = 'inc' )
 	}
 	return true;
 }
+
 
 ?>
