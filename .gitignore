@@ -23,3 +23,5 @@ npm-debug.log
 /media/users/admin/private_message
 /media/import
 /media/blogs/forums
+_notes
+.DS_store
