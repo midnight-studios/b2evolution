@@ -434,6 +434,25 @@ class User extends DataObject
 
 
 	/**
+	 * Check relations for restrictions before deleting
+	 *
+	 * @param string
+	 * @param array list of foreign keys to ignore
+	 * @param boolean TRUE to display restriction as link to edit the record
+	 * @return boolean true if no restriction prevents deletion
+	 */
+	function check_delete( $restrict_title, $ignore = array(), $addlink = false )
+	{
+		// Prepend user login before restriction messages to know what user is deleting:
+		$user_login_link = $this->get_identity_link( array(
+				'link_text' => 'login',
+			) );
+
+		return parent::check_delete( $user_login_link.': '.$restrict_title, $ignore, true );
+	}
+
+
+	/**
 	 * Load data from registration form
 	 *
 	 * @return boolean true if loaded data seems valid.
@@ -4213,9 +4232,15 @@ class User extends DataObject
 	 */
 	function dbdelete( & $Log = array() )
 	{
-		global $DB, $Plugins;
+		global $DB, $Plugins, $current_User;
 
 		if( $this->ID == 0 ) debug_die( 'Non persistant object cannot be deleted!' );
+
+		if( $this->ID == 1 ||
+		    ( is_logged_in() && $this->ID == $current_User->ID ) )
+		{	// Don't allow to delete first admin user and current logged in user:
+			return false;
+		}
 
 		$deltype = param( 'deltype', 'string', '' ); // spammer
 
