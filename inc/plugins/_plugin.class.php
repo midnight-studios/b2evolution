@@ -1916,6 +1916,23 @@ class Plugin
 
 
 	/**
+	 * Event handler: Called before comment textarea of the front-office comment form.
+	 *
+	 * You might want to use this to inject antispam payload to use in
+	 * in {@link GetSpamKarmaForComment()} or modify the Comment according
+	 * to it in {@link BeforeCommentFormInsert()}.
+	 *
+	 * @see Plugin::BeforeCommentFormInsert(), Plugin::AfterCommentFormInsert()
+	 * @param array Associative array of parameters
+	 *   - 'Form': the comment form generating object
+	 *   - 'Item': the Item for which the comment is meant
+	 */
+	function DisplayCommentFormFieldsetAboveComment( & $params )
+	{
+	}
+
+
+	/**
 	 * Event handler: Called in the submit button section of the
 	 * front-office comment form.
 	 *
@@ -2168,6 +2185,24 @@ class Plugin
 	 *   - 'comment_ID': ID of the comment where the user clicked the msgform icon (if any)
 	 */
 	function DisplayMessageFormFieldset( & $params )
+	{
+	}
+
+
+	/**
+	 * Event handler: Called before message textarea of the front-office comment form, which
+	 * allows to send an email to a user/commentator.
+	 *
+	 * You might want to use this to inject antispam payload to use in
+	 * in {@link MessageFormSent()}.
+	 *
+	 * @param array Associative array of parameters
+	 *   - 'Form': the comment form generating object
+	 *   - 'recipient_ID': ID of the user (if any)
+	 *   - 'item_ID': ID of the item where the user clicked the msgform icon (if any)
+	 *   - 'comment_ID': ID of the comment where the user clicked the msgform icon (if any)
+	 */
+	function DisplayMessageFormFieldsetAboveMessage( & $params )
 	{
 	}
 
@@ -3987,7 +4022,6 @@ class Plugin
 	 */
 	function get_default_setting( $parname, $params, $group = NULL )
 	{
-		
 		if( $group === NULL )
 		{	// Get default value from sinple field:
 			if( isset( $params[$parname]['type'] ) && $params[$parname]['type'] == 'checklist' &&
@@ -4006,48 +4040,8 @@ class Plugin
 			}
 		}
 		else
-		{	
-			
-			if( strpos( $parname, '[' ) !== false )
-			{
-
-				// strip out all the iterations
-				$parname = str_replace( ']', '', preg_replace('/\[\d\]/', '', $parname ) );
-				
-				//create array
-				$setting_names = explode( '[', $parname );
-				
-				/* 
-				* match $params level to $parname
-				*/ 
-				for( $i = 0; $i < count( $setting_names ) - 1; $i++ )
-				{
-					if( isset( $params[ $setting_names[$i] ] ) )
-					{
-						if( isset( $params[ $setting_names[$i] ]['entries'] ) )
-						{
-							
-							$params = $params[ $setting_names[$i] ]['entries'];
-
-						}
-						
-					}
-				}
-
-				$pos_last_bracket = strrpos($parname, '[');
-				$parname = substr( str_replace( '[', '', substr($parname, $pos_last_bracket) ), strlen( $group ) );
-				
-				
-			}
-			else
-			{
-				
-				// Get default value from input group field:
-				$parname = substr( $parname, strlen( $group ) );
-			}
-			
-				
-			//pre_dump($parname, $params[$group]['inputs']);
+		{	// Get default value from input group field:
+			$parname = substr( $parname, strlen( $group ) );
 			if( isset( $params[$group]['inputs'][$parname]['defaultvalue'] ) )
 			{	// We have a default value:
 				return $params[$group]['inputs'][$parname]['defaultvalue'] ;
@@ -4139,7 +4133,6 @@ class Plugin
 	 */
 	function get_msg_setting( $parname, $group = NULL )
 	{
-		
 		if( empty( $this->Settings ) )
 		{
 			global $Plugins;
@@ -4149,7 +4142,6 @@ class Plugin
 		// Use prefix 'msg_' for all message settings except of "msg_apply_rendering":
 		$value = $this->Settings->get( $parname == 'msg_apply_rendering' ? $parname : 'msg_'.$parname );
 
-		
 		if( ! is_null( $value ) )
 		{ // We have a value for this param:
 			return $value;

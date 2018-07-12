@@ -94,6 +94,11 @@ else
 	}
 }
 
+$Plugins->trigger_event( 'DisplayMessageFormFieldsetAboveMessage', array(
+		'Form'              => & $Form,
+		'form_use_fieldset' => false,
+	) );
+
 $Form->text_input( 'thrd_title', $edited_Thread->title, $params['cols'], T_('Subject'), '', array( 'maxlength'=> 255, 'required'=>true, 'class'=>'wide_input large' ) );
 
 
@@ -148,7 +153,7 @@ if( !empty( $thrd_recipients_array ) )
 
 // display submit button, but only if enabled
 $Form->end_form( array(
-		array( 'submit', 'actionArray[preview]', T_('Preview'), 'SaveButton btn-info' ),
+		array( 'submit', 'actionArray[preview]', /* TRANS: Verb */ T_('Preview'), 'SaveButton btn-info' ),
 		array( 'submit', 'actionArray[create]', T_('Send message'), 'SaveButton' )
 	) );
 

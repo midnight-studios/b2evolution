@@ -118,7 +118,7 @@ $Form->begin_fieldset( T_('Use of Comments').get_manual_link( 'item-type-comment
 $Form->end_fieldset();
 
 
-$Form->begin_fieldset( T_('Use of Custom Fields').get_manual_link( 'item-type-custom-fields' ) );
+$Form->begin_fieldset( T_('Use of Custom Fields').get_manual_link( 'item-type-custom-fields' ), array( 'id' => 'custom_fields' ) );
 	$Form->checkbox( 'ityp_use_custom_fields', $edited_Itemtype->use_custom_fields, T_('Use custom fields') );
 
 	$custom_field_types = array(
@@ -299,6 +299,7 @@ $display_params = array(
 		'page_url' => 'admin.php?ctrl=itemtypes&ityp_ID='.$edited_Itemtype->ID.'&action=edit'
 	);
 
+$Results->checkbox_toggle_selectors = 'input[name^=status_]:checkbox';
 $Results->display( $display_params );
 
 

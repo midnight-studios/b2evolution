@@ -1,3 +1,4 @@
+.gitignore
 .htaccess
 _cache/c*
 conf/_basic_config.php
@@ -26,3 +27,5 @@ npm-debug.log
 .DS_Store
 dwsync.xml
 _notes
+media
+OLD

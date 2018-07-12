@@ -89,99 +89,7 @@ switch( $action )
 		load_funcs( 'antispam/model/_antispam.funcs.php' );
 		echo antispam_get_whois( $query, $window_height );
 		break;
-		
-	case 'add_plugin_sett_selected':
-		// Dislay a new Plugin(User)Settings set ( it's used only from plugins with "select_input" type settings):
 
-		// This does not require CSRF because it doesn't update the db, it only displays a new block of empty plugin setting fields
- 
-		// Check permission to view plugin settings:
-		$current_User->check_perm( 'options', 'view', true );
- 
-		// Set admin skin, used for buttons, @see button_class()
-		$admin_skin = $UserSettings->get( 'admin_skin', $current_User->ID );
-		require_once $adminskins_path.$admin_skin.'/_adminUI.class.php';
-		$AdminUI = new AdminUI();
-
-		param( 'plugin_ID', 'integer', true );
-		param( 'set_type', 'string', '' ); // 'Settings', 'UserSettings', 'CollSettings', 'MsgSettings', 'EmailSettings', 'Skin', 'Widget'
-		param( 'entry_type', 'string', '' ); 
-		param( 'entry_name', 'string', '' ); 
-		param( 'parname', 'string', '' ); 
-		param( 'k_nb', 'integer', true );
-
-		if( ! in_array( $set_type, array( 'Settings', 'UserSettings', 'CollSettings', 'MsgSettings', 'EmailSettings', 'Skin', 'Widget' ) ) )
-		{
-			bad_request_die( 'Invalid set_type param!' );
-		}
-
-		param( 'blog', 'integer', 0 );
-		$BlogCache = & get_BlogCache();
-		$Blog = & $BlogCache->get_by_ID( $blog, false, false );
- 
-		$target_Object = NULL;
-
-		switch( $set_type )
-		{
-			case 'Widget':
-				$WidgetCache = & get_WidgetCache();
-				$Widget = & $WidgetCache->get_by_ID( $plugin_ID );
-				$Plugin = & $Widget->get_Plugin();
-				$plugin_Object = $Widget;
-				break;
- 
-			case 'Skin':
-				$SkinCache = & get_SkinCache();
-				$Skin = & $SkinCache->get_by_ID( $plugin_ID );
-				$Plugin = $Skin;
-				$plugin_Object = $Skin;
-				break;
- 
-			default:
-				// 'Settings', 'UserSettings', 'CollSettings', 'MsgSettings', 'EmailSettings'
-				$admin_Plugins = & get_Plugins_admin(); // use Plugins_admin, because a plugin might be disabled
-				$Plugin = & $admin_Plugins->get_by_ID( $plugin_ID );
-				$plugin_Object = $Plugin;
-				if( $set_type == 'UserSettings' )
-				{	// Initialize User object for this plugin type:
-					param( 'user_ID', 'integer', true );
-					$UserCache = & get_UserCache();
-					$target_Object = & $UserCache->get_by_ID( $user_ID );
-				}
-				break;
-		}
- 
-		if( ! $Plugin )
-		{
-			bad_request_die('Invalid Plugin.');
-		}
-		param( 'set_path', '/^\w+(?:\[\w+\])+$/', '' );
-
-		load_funcs('plugins/_plugin.funcs.php');
-
-		// Init the new setting set:
-		_set_setting_by_path( $Plugin, $set_type, $set_path, array() );
- 
-		// Get the new plugin setting set and display it with a fake Form
-		$r = get_plugin_settings_node_by_path( $Plugin, $set_type, $set_path, /* create: */ false );
-
-		$Form = new Form(); // fake Form to display plugin setting
-
-		$k_nb++; //advance the field number
-
-		//cycle through avaiable items:
-		foreach( $r['set_meta']['entries'] as $l_entry_name => $l_entry_meta )
-		{
-			// if the passed param['type'] is set (exists) and it matches items['type'] and key matches $entry_name
-			if( isset( $l_entry_meta['type'] ) && $l_entry_meta['type'] == $entry_type && $entry_name == $l_entry_name )
-			{
-				autoform_display_field( $parname.'['.$k_nb.']['.$l_entry_name.']', $r['set_meta']['entries'][$l_entry_name], $Form, $set_type, $plugin_Object, $target_Object, $r['set_node'][$l_entry_name] );
-				//this call has only one item (the selected item), the rest is ignored, so break out alltogether
-				break 2;
-			}
-		}
-		break;
-		
 	case 'add_plugin_sett_set':
 		// Dislay a new Plugin(User)Settings set ( it's used only from plugins with "array" type settings):
 
@@ -357,7 +265,7 @@ switch( $action )
 		echo get_opentrash_link( true, true, array(
 				'before' => ' <span id="recycle_bin">',
 				'after' => '</span>',
-				'class' => 'btn btn-default'
+				'class' => 'btn btn-default'.( param( 'request_from', 'string' ) == 'items' ? '' : ' btn-sm' ),
 			) );
 		break;
 
@@ -408,7 +316,7 @@ switch( $action )
 			// In case of comments_fullview we must set a filterset name to be abble to restore filterset.
 			// If $item_ID is not valid, then this requests came from the comments_fullview
 			// TODO: asimo> This should be handled with a better solution
-			$filterset_name = /*'';*/( $item_ID > 0 ) ? '' : 'fullview';
+			$filterset_name = /*'';*/( $item_ID > 0 ) ? '' : ( $comment_type == 'meta' ? 'meta' : 'fullview' );
 
 			echo_item_comments( $blog, $item_ID, $statuses, $currentpage, $limit, array(), $filterset_name, $expiry_status, $comment_type );
 		}
@@ -1025,6 +933,21 @@ switch( $action )
 		echo evo_json_encode( $recipients_data );
 
 		exit(0); // Exit here in order to don't display the AJAX debug info after JSON formatted data
+
+	case 'get_automation_status':
+		// Get automation status:
+
+		// Check permission:
+		$current_User->check_perm( 'options', 'view', true );
+
+		param( 'autm_ID', 'integer', true );
+
+		$AutomationCache = & get_AutomationCache();
+		$Automation = & $AutomationCache->get_by_ID( $autm_ID );
+
+		echo $Automation->get( 'status' );
+
+		exit(0); // Exit here in order to don't display the AJAX debug info.
 
 	default:
 		$incorrect_action = true;

@@ -3667,13 +3667,11 @@ class Form extends Widget
 			$field_params['note_format'] = '<div>'.$field_params['note_format'].'</div>';
 		}
 
-		// Why is this set to false for this type? This is needed for js hooks else remove button won't work in type select_input:
-		#$field_params['id'] = false; // No ID attribute for the label
+		$field_params['id'] = false; // No ID attribute for the label
 		if( isset( $field_params['required'] ) )
 		{
 			$field_required = $field_params['required'];
 		}
-
 		$this->handle_common_params( $field_params, $field_name, $field_label );
 		unset($field_params['id']);  // unset, so it gets handled correctly as default below
 
@@ -4457,18 +4455,26 @@ class Form extends Widget
 
 		$r = $input_prefix;
 
-		if( $field_params['tag'] == 'button' )
+		switch( $field_params['tag'] )
 		{
-			$value = $field_params['value'];
-			unset( $field_params['value'] );
-			unset( $field_params['tag'] );
+			case 'button':
+				$value = $field_params['value'];
+				unset( $field_params['value'] );
+				unset( $field_params['tag'] );
+				$r .= '<button'.get_field_attribs_as_string( $field_params, $format_to_output ).'>'.$value.'</button>';
+				break;
 
-			$r .= '<button'.get_field_attribs_as_string( $field_params, $format_to_output ).'>'.$value.'</button>';
-		}
-		else
-		{
-			unset( $field_params['tag'] );
-			$r .= '<input'.get_field_attribs_as_string( $field_params, $format_to_output ).' />';
+			case 'link':
+				$value = $field_params['value'];
+				unset( $field_params['value'] );
+				unset( $field_params['tag'] );
+				unset( $field_params['type'] );
+				$r .= '<a'.get_field_attribs_as_string( $field_params, $format_to_output ).'>'.$value.'</a>';
+				break;
+
+			default:
+				unset( $field_params['tag'] );
+				$r .= '<input'.get_field_attribs_as_string( $field_params, $format_to_output ).' />';
 		}
 
 		$r .= $input_suffix;

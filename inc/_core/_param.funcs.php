@@ -337,7 +337,6 @@ function param( $var, $type = 'raw', $default = '', $memorize = false,
 			case 'array:regexp':
 			case 'array:array:string':
 			case 'array:array:filepath':
-				
 				if( ! is_array( $GLOBALS[$var] ) )
 				{ // This param must be array
 					debug_die( 'param(-): <strong>'.$var.'</strong> is not array!' );
@@ -349,7 +348,6 @@ function param( $var, $type = 'raw', $default = '', $memorize = false,
 				$one_dimensional = ( ( $type == 'array' ) || ( $type == 'array:integer' ) || ( $type == 'array:string' ) || ( $type == 'array:filepath' ) || ( $type == 'array:regexp' ) );
 				// Check if the given array type should contains string elements:
 				$contains_strings = ( ( $type == 'array:string' ) || ( $type == 'array:array:string' ) || ( $type == 'array:filepath' ) || ( $type == 'array:array:filepath' ) );
-				
 				if( $one_dimensional )
 				{ // Convert to a two dimensional array to handle one and two dimensional arrays the same way
 					$globals_var = array( $globals_var );
@@ -371,114 +369,42 @@ function param( $var, $type = 'raw', $default = '', $memorize = false,
 
 					foreach( $var_array as $j => $var_value )
 					{
-						if( is_array( $var_value ) )
-						{ 							
-							$var_array = $var_value;
-							
-							$load_value = function ( array $array, $variables ) use ( & $load_value )
-							{
-								foreach ( $array as $j => $var_value ) 
-								{
-									if ( is_array( $var_value ) )
-									{
-										$load_value( $var_value, $variables );
-									}
-									else
-									{
-										
-										$type = $variables['type'];
-										$i = $variables['i'];
-										$contains_strings = $variables['contains_strings']; 
-									
-										if( ! is_scalar( $var_value ) )
-										{ // This happens if someone uses "foo[][]=x" where "foo[]" is expected as string
-											debug_die( 'param(-): element of array <strong>'.$var.'</strong> is not scalar!' );
-										}
-
-										if( $contains_strings )
-										{	// Prepare string elements of array:
-											if( $type == 'array:filepath' || $type == 'array:array:filepath' )
-											{	// Special verifying for file path params:
-												// Format param to valid file path value:
-												$globals_var[$i][$j] = param_format( $var_value, 'filepath' );
-												if( ! is_safe_filepath( $globals_var[$i][$j] ) )
-												{	// We cannot accept this unsecure file path:
-													bad_request_die( sprintf( T_('Illegal value received for parameter &laquo;%s&raquo;!'), $var ) );
-												}
-											}
-											else
-											{	// Format param to valid string value:
-												$globals_var[$i][$j] = param_format( $var_value, 'string' );
-											}
-											continue;
-										}
-
-										if( isset( $elements_regexp ) )
-										{ // Array contains elements which must match to the given regular expression
-											if( ( $strict_typing == 'allow_empty' && empty( $var_value ) )
-												|| preg_match( $elements_regexp, $var_value ) )
-											{ // OK match, set the corresponding type
-												settype( $globals_var[$i][$j], $elements_type );
-											}
-											else
-											{ // No match, cannot accept this MISMATCH
-												// Note: In case of array:integer or array:regexp we always use strict typing for the array elements
-												bad_request_die( sprintf( T_('Illegal value received for parameter &laquo;%s&raquo;!'), $var ) );
-											}
-										}
-									
-									}
-								}
-
-								return $var_value;
-								
-							};
-							
-							$load_value( $var_array, array( 'type' => $type, 'i' => $i, 'contains_strings' => $contains_strings ) );
-								
+						if( ! is_scalar( $var_value ) )
+						{ // This happens if someone uses "foo[][]=x" where "foo[]" is expected as string
+							debug_die( 'param(-): element of array <strong>'.$var.'</strong> is not scalar!' );
 						}
-						else
-						{
-						
-							if( ! is_scalar( $var_value ) )
-							{ // This happens if someone uses "foo[][]=x" where "foo[]" is expected as string
-								debug_die( 'param(-): element of array <strong>'.$var.'</strong> is not scalar!' );
-							}
 
-							if( $contains_strings )
-							{	// Prepare string elements of array:
-								if( $type == 'array:filepath' || $type == 'array:array:filepath' )
-								{	// Special verifying for file path params:
-									// Format param to valid file path value:
-									$globals_var[$i][$j] = param_format( $var_value, 'filepath' );
-									if( ! is_safe_filepath( $globals_var[$i][$j] ) )
-									{	// We cannot accept this unsecure file path:
-										bad_request_die( sprintf( T_('Illegal value received for parameter &laquo;%s&raquo;!'), $var ) );
-									}
-								}
-								else
-								{	// Format param to valid string value:
-									$globals_var[$i][$j] = param_format( $var_value, 'string' );
-								}
-								continue;
-							}
-
-							if( isset( $elements_regexp ) )
-							{ // Array contains elements which must match to the given regular expression
-								if( ( $strict_typing == 'allow_empty' && empty( $var_value ) )
-									|| preg_match( $elements_regexp, $var_value ) )
-								{ // OK match, set the corresponding type
-									settype( $globals_var[$i][$j], $elements_type );
-								}
-								else
-								{ // No match, cannot accept this MISMATCH
-									// Note: In case of array:integer or array:regexp we always use strict typing for the array elements
+						if( $contains_strings )
+						{	// Prepare string elements of array:
+							if( $type == 'array:filepath' || $type == 'array:array:filepath' )
+							{	// Special verifying for file path params:
+								// Format param to valid file path value:
+								$globals_var[$i][$j] = param_format( $var_value, 'filepath' );
+								if( ! is_safe_filepath( $globals_var[$i][$j] ) )
+								{	// We cannot accept this unsecure file path:
 									bad_request_die( sprintf( T_('Illegal value received for parameter &laquo;%s&raquo;!'), $var ) );
 								}
 							}
-						
+							else
+							{	// Format param to valid string value:
+								$globals_var[$i][$j] = param_format( $var_value, 'string' );
+							}
+							continue;
 						}
-						
+
+						if( isset( $elements_regexp ) )
+						{ // Array contains elements which must match to the given regular expression
+							if( ( $strict_typing == 'allow_empty' && empty( $var_value ) )
+							    || preg_match( $elements_regexp, $var_value ) )
+							{ // OK match, set the corresponding type
+								settype( $globals_var[$i][$j], $elements_type );
+							}
+							else
+							{ // No match, cannot accept this MISMATCH
+								// Note: In case of array:integer or array:regexp we always use strict typing for the array elements
+								bad_request_die( sprintf( T_('Illegal value received for parameter &laquo;%s&raquo;!'), $var ) );
+							}
+						}
 					}
 				}
 
@@ -2640,7 +2566,7 @@ function check_html_sanity( $content, $context = 'posting', $User = NULL, $encod
 		{
 			$errmsg = ($context == 'commenting')
 				? T_('Illegal content found (spam?)').'.'
-				: sprintf( T_('Illegal content found: blacklisted word &laquo;%s&raquo;.'), htmlspecialchars($block) );
+				: sprintf( T_('Illegal content found: blacklisted word "%s".'), htmlspecialchars($block) );
 		}
 
 		$Messages->add_to_group(	$errmsg, 'error', T_('Validation errors:') );
@@ -2957,13 +2883,14 @@ function is_safe_filepath( $filepath )
  * @param string Default value or TRUE if user input required
  * @param boolean Do we need to memorize this to regenerate the URL for this page?
  * @return string Validated and formatted value of condition param which is ready to be stored in DB
+ * @param string|array Allowed rules separated by comma, Use char "-" before each rule to deny it, NULL - to allow all rules
  */
-function param_condition( $var, $default = '', $memorize = false )
+function param_condition( $var, $default = '', $memorize = false, $rules = NULL )
 {
 	$condition = param( $var, 'string', $default, $memorize );
 
 	// Format condition to database format:
-	$condition = param_format_condition( $condition, 'db' );
+	$condition = param_format_condition( $condition, 'db', $rules );
 
 	// Update condition param with validated and formatted value:
 	set_param( $var, $condition );
@@ -2978,9 +2905,10 @@ function param_condition( $var, $default = '', $memorize = false )
  *
  * @param object|string JSON object of condition param
  * @param string Format action: 'db' - to database format, 'js' - from database to JavaScript format
+ * @param string|array Allowed rules separated by comma, Use char "-" before each rule to deny it, NULL - to allow all rules
  * @return object
  */
-function param_format_condition( $condition, $action )
+function param_format_condition( $condition, $action, $rules = NULL )
 {
 	$is_encoded = ! is_object( $condition );
 
@@ -2992,21 +2920,57 @@ function param_format_condition( $condition, $action )
 		{	// Wrong condition object:
 			return $action == 'db' ? '' : 'null';
 		}
+
+		if( ! isset( $condition->condition ) )
+		{	// Set default condition:
+			$condition->condition = 'AND';
+		}
 	}
 
 	if( empty( $condition->rules ) )
 	{	// No rules, Skip it:
+		if( $is_encoded )
+		{	// If the source param has been passed here as encoded we should return it in the same format:
+			$condition = json_encode( $condition );
+		}
 		return $condition;
 	}
 
+	if( $rules !== NULL )
+	{
+		if( is_string( $rules ) )
+		{	// Convert string to array:
+			$rules = array_map( 'trim', explode( ',', $rules ) );
+		}
+		$allowed_rules = array();
+		$denied_rules = array();
+		foreach( $rules as $r => $rule )
+		{
+			if( substr( $rule, 0, 1 ) == '-' )
+			{	// Deny this rule:
+				$denied_rules[] = substr( $rule, 1 );
+			}
+			else
+			{	// Allow this rule:
+				$allowed_rules[] = $rule;
+			}
+		}
+	}
+
+	$condition_rules = array();
 	foreach( $condition->rules as $r => $rule )
 	{
 		if( isset( $rule->rules ) && is_array( $rule->rules ) )
 		{	// This is a group of conditions, Run this function recursively:
-			$condition->rules[ $r ] = param_format_condition( $rule, $action );
+			$condition_rules[] = param_format_condition( $rule, $action, $rules );
 		}
-		else
-		{	// This is a single field, Format condition only for this field:
+		elseif( $rules === NULL || 
+		        ( $rules !== NULL && in_array( $rule->id, $allowed_rules ) && ! in_array( $rule->id, $denied_rules ) ) )
+		{	// This is a single allowed field, Format condition only for this field:
+			if( ! isset( $rule->type ) )
+			{	// Set default type:
+				$rule->type = 'string';
+			}
 			if( is_array( $rule->value ) )
 			{	// Field with multiple values like 'between'(field BETWEEN value_1 AND value_2):
 				foreach( $rule->value as $v => $rule_value )
@@ -3018,8 +2982,15 @@ function param_format_condition( $condition, $action )
 			{	// Field with single value like 'equal'(field = value):
 				$rule->value = param_format_condition_rule( $rule->value, $rule->type, $action );
 			}
-			$condition->rules[ $r ] = $rule;
+			$condition_rules[] = $rule;
 		}
+	}
+
+	$condition->rules = $condition_rules;
+
+	if( empty( $condition->rules ) )
+	{	// Return empty string if condition has no allowed rules:
+		return $action == 'db' ? '' : 'null';
 	}
 
 	if( $is_encoded )
@@ -3052,7 +3023,8 @@ function param_format_condition_rule( $rule_value, $rule_type, $action )
 
 				case 'js':
 					// To JavaScript format:
-					return mysql2date( locale_input_datefmt(), $rule_value );
+					$formatted_date = mysql2date( locale_input_datefmt(), $rule_value );
+					return $formatted_date ? $formatted_date : $rule_value;
 			}
 			break;
 	}

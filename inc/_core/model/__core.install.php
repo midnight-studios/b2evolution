@@ -145,6 +145,7 @@ $schema_queries = array(
 			uf_ufdf_ID int(10) unsigned NOT NULL,
 			uf_varchar varchar(10000) NOT NULL,
 			PRIMARY KEY (uf_ID),
+			INDEX uf_user_ID ( uf_user_ID ),
 			INDEX uf_ufdf_ID ( uf_ufdf_ID ),
 			INDEX uf_varchar ( uf_varchar (255) )
 		) ENGINE = innodb DEFAULT CHARSET = $db_storage_charset" ),
@@ -213,6 +214,16 @@ $schema_queries = array(
 			upv_visitor_user_ID INT(11) UNSIGNED NOT NULL,
 			upv_last_visit_ts   TIMESTAMP NOT NULL DEFAULT '2000-01-01 00:00:00',
 			PRIMARY KEY ( upv_visited_user_ID, upv_visitor_user_ID )
+		) ENGINE = innodb DEFAULT CHARSET = $db_storage_charset" ),
+
+	'T_users__profile_visit_counters' => array(
+		'Creating table for profile visit counters',
+		"CREATE TABLE T_users__profile_visit_counters (
+			upvc_user_ID  INT(11) UNSIGNED NOT NULL,
+			upvc_total_unique_visitors INT(10) UNSIGNED NOT NULL DEFAULT 0,
+			upvc_last_view_ts TIMESTAMP NOT NULL DEFAULT '2000-01-01 00:00:00',
+			upvc_new_unique_visitors INT(10) UNSIGNED NOT NULL DEFAULT 0,
+			PRIMARY KEY (upvc_user_ID)
 		) ENGINE = innodb DEFAULT CHARSET = $db_storage_charset" ),
 
 	'T_users__tag' => array(
@@ -535,6 +546,7 @@ $schema_queries = array(
 			PRIMARY KEY (enls_user_ID, enls_enlt_ID)
 		) ENGINE = myisam DEFAULT CHARACTER SET = $db_storage_charset" ),
 
+	// When adding fields to this table do not forget to check EmailCampaign::duplicate() for fields that should not be duplicated!
 	'T_email__campaign' => array(
 		'Creating email campaigns table',
 		"CREATE TABLE T_email__campaign (
@@ -542,7 +554,7 @@ $schema_queries = array(
 			ecmp_date_ts              TIMESTAMP NOT NULL DEFAULT '2000-01-01 00:00:00',
 			ecmp_enlt_ID              INT UNSIGNED NOT NULL,
 			ecmp_name                 VARCHAR(255) NOT NULL,
-			ecmp_email_title          VARCHAR(255) NOT NULL,
+			ecmp_email_title          VARCHAR(255) NULL,
 			ecmp_email_defaultdest    VARCHAR(255) NULL,
 			ecmp_email_html           TEXT NULL,
 			ecmp_email_text           TEXT NULL,
@@ -629,6 +641,7 @@ $schema_queries = array(
 			step_no_next_step_delay    INT UNSIGNED NULL,
 			step_error_next_step_ID    INT NULL,
 			step_error_next_step_delay INT UNSIGNED NULL,
+			step_diagram               VARCHAR(64) NULL,
 			PRIMARY KEY                (step_ID),
 			UNIQUE                     step_autm_ID_order (step_autm_ID, step_order)
 		) ENGINE = innodb DEFAULT CHARACTER SET = $db_storage_charset" ),
@@ -652,7 +665,7 @@ $schema_queries = array(
 			slg_type      ENUM('info', 'warning', 'error', 'critical_error') COLLATE ascii_general_ci NOT NULL DEFAULT 'info',
 			slg_origin    ENUM('core', 'plugin') COLLATE ascii_general_ci,
 			slg_origin_ID INT UNSIGNED NULL,
-			slg_object    ENUM('comment', 'item', 'user', 'file') COLLATE ascii_general_ci,
+			slg_object    ENUM('comment', 'item', 'user', 'file', 'email_log') COLLATE ascii_general_ci,
 			slg_object_ID INT UNSIGNED NULL,
 			slg_message   VARCHAR(255) NOT NULL,
 			PRIMARY KEY   (slg_ID),

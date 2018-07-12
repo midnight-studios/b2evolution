@@ -192,27 +192,6 @@ div.avatartag {
 	}
 }
 
-.compose_layout{
-	margin-bottom: 15px;
-	td.label {
-		font-size: 100%;
-		padding-right: 10px;
-		color: #333;
-	}
-	#post_locale {
-		width: 180px !important;
-	}
-	td {
-		white-space: nowrap;
-		vertical-align: middle;
-	}
-}
-#itemform_custom_fields, #itemform_adv_props {
-	.compose_layout {
-		margin-bottom: 0;
-	}
-}
-
 div.log_container {
 	margin: 0;
 }
@@ -1020,10 +999,19 @@ h2.user_title::first-line {
 }
 
 #itemform_extra {
-	#ffield_item_owner_login .help-inline {
-		display: inline-block;
-		vertical-align: middle;
-		margin-top: 10px;
+	td.flabel_item_owner_login {
+		vertical-align: top;
+		padding-top: 6px;
+	}
+	#ffield_item_owner_login {
+		.help-inline {
+			display: inline-block;
+			vertical-align: middle;
+			margin-top: 10px;
+		}
+		#item_owner_login {
+			vertical-align: middle !important;
+		}
 	}
 	label.ffield_item_create_user {
 		padding: 0;
@@ -1591,9 +1579,6 @@ table.diff {
 .timestamp .time {
 	font-size: 84%;
 }
-.compact_data {
-	white-space: nowrap;
-}
 
 // Style fixes for email preview from back-office:
 #skin_wrapper {
@@ -1689,4 +1674,15 @@ table.diff {
 	select, input {
 		max-width: 100%;
 	}
+}
+
+// Fix styles for jQuery plugin "QueryBuilder":
+div.query-builder .rule-container .rule-value-container {
+	border: none;
+	padding-left: 0;
+}
+
+// Style for a trasfering object, e-g when a comment is moving to a recycle bin:
+.ui-effects-transfer {
+	border: 1px solid #F00;
 }

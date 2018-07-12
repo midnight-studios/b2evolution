@@ -21,7 +21,7 @@ class bootstrap_blog_Skin extends Skin
 	 * Skin version
 	 * @var string
 	 */
-	var $version = '6.10.1';
+	var $version = '6.10.3';
 
 	/**
 	 * Do we want to use style.min.css instead of style.css ?
@@ -109,242 +109,7 @@ class bootstrap_blog_Skin extends Skin
 	 */
 	function get_param_definitions( $params )
 	{
-		global $app_version;
 		$r = array_merge( array(
-			
-			
-			'test_begin' => array(
-				'label' => $this->T_('Normal Input Group'),
-				'layout' => 'begin_fieldset'
-			),
-			
-			
-	'items' => array(
-										'label' 		=> T_('Items'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => 'items value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => 'items label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-								)),
-			
-			
-			'test_end' => array(
-				'layout' => 'end_fieldset'
-			),
-
-
-					'input_item_1' => array(
-					'label' 		=> T_('Select Input'),
-					'note' 			=> T_('Your note'),
-					'multiple' 		=> true, 
-					'max_number' 	=> 4,
-					'use_fieldset' 	=> true, 
-					'fold' 			=> true, 
-					'type' 			=> 'select_input',
-					'entries' 		=> array(
-			
-			
-									'color' => array(
-														'label' => T_('Color'),
-														'defaultvalue' => '#444444',
-														'type' => 'color',
-														//'allow_empty' => false,
-													),
-			
-
-									'_vagtables' => array(
-										'label' 		=> T_('Vegtables'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => '_vagtables value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => '_vagtables label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-			
-														'_value' => array(
-																			'label' => T_('Color'),
-																			'defaultvalue' => '#444444',
-																			'type' => 'color',
-																			//'allow_empty' => false,
-																		),
-
-								)),
-									'_fruits' => array(
-										'label' 		=> T_('Fruits'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => 'fruits value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => 'fruits label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-
-								)),
-
-
-
-
-			)),
-
-
-
-
-							'plugin_sets'	=> array(
-												'label'			=> T_('Dynamic Fields'),
-												'note'			=> T_('Click to add another field item'),
-												// limited by array:array:string therefore html_textarea won't work
-												'type'			=> version_compare( $app_version, '6.6.5', '>' ) ? 'array:array:string' : 'array',
-												'max_number'		=> 3,
-												'fold' => true,
-												'entries'		=> array(
-
-
-
-
-					'input_item_1' => array(
-					'label' 		=> T_('Select Input'),
-					'note' 			=> T_('Your note'),
-					'multiple' 		=> true, 
-					'max_number' 	=> 4,
-					'use_fieldset' 	=> true, 
-					'fold' 			=> true, 
-					'type' 			=> 'select_input',
-					'entries' 		=> array(
-
-									'_color' => array(
-										'label' 		=> T_('Color'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Color'),
-																			'defaultvalue' => '#444444',
-																			'type' => 'color',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Color'),
-																			'defaultvalue' => '#444444',
-																			'type' => 'color',
-																			//'allow_empty' => false,
-																		),
-
-								)),
-									'_vagtables' => array(
-										'label' 		=> T_('Vegtables'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => 'value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => 'label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-
-								)),
-									'_fruits' => array(
-										'label' 		=> T_('Fruits'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => 'value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => 'label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-
-								)),
-
-
-
-
-			)),
-
-
-
-
-					'input_item_3' => array(
-					'label' 		=> T_('Select Input'),
-					'note' 			=> T_('Your note'),
-					'multiple' 		=> true, 
-					'max_number' 	=> 4,
-					'use_fieldset' 	=> false, 
-					'fold' 			=> true, 
-					'type' 			=> 'select_input',
-					'entries' 		=> array(
-
-									'_vagtables' => array(
-										'label' 		=> T_('Vegtables'),
-										'type' 			=> 'input_group',
-										'inputs' 		=> array(
-
-
-											
-														'_value' => array(
-																			'label' => T_('Value'),
-																			'defaultvalue' => 'value',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-														'_label' => array(
-																			'label' => T_('Label'),
-																			'defaultvalue' => 'label',
-																			'type' => 'text',
-																			//'allow_empty' => false,
-																		),
-								)),
-			)),
-	)),
-
-				
 				'section_layout_start' => array(
 					'layout' => 'begin_fieldset',
 					'label'  => T_('Layout Settings')
@@ -409,6 +174,14 @@ class bootstrap_blog_Skin extends Skin
 								'type' => 'select',
 							)
 						)
+					),
+
+					'message_affix_offset' => array(
+						'label' => T_('Messages affix offset'),
+						'note' => 'px. ' . T_('Set message top offset value.'),
+						'defaultvalue' => '',
+						'type' => 'integer',
+						'allow_empty' => true,
 					),
 				'section_layout_end' => array(
 					'layout' => 'end_fieldset',
@@ -778,6 +551,7 @@ class bootstrap_blog_Skin extends Skin
 -->
 		</style>';
 			add_headline( $custom_css );
+			init_affix_messages_js( $this->get_setting( 'message_affix_offset' ) );
 		}
 	}
 

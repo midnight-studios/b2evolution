@@ -160,25 +160,6 @@ h2 .glyphicon {
   margin-top: 14px;
   display: inline-block;
 }
-.compose_layout {
-  margin-bottom: 15px;
-}
-.compose_layout td.label {
-  font-size: 100%;
-  padding-right: 10px;
-  color: #333;
-}
-.compose_layout #post_locale {
-  width: 180px !important;
-}
-.compose_layout td {
-  white-space: nowrap;
-  vertical-align: middle;
-}
-#itemform_custom_fields .compose_layout,
-#itemform_adv_props .compose_layout {
-  margin-bottom: 0;
-}
 div.log_container {
   margin: 0;
 }
@@ -962,10 +943,17 @@ h2.user_title::first-line {
 #itemform_edit_workflow .form-group .controls {
   display: inline-block;
 }
+#itemform_extra td.flabel_item_owner_login {
+  vertical-align: top;
+  padding-top: 6px;
+}
 #itemform_extra #ffield_item_owner_login .help-inline {
   display: inline-block;
   vertical-align: middle;
   margin-top: 10px;
+}
+#itemform_extra #ffield_item_owner_login #item_owner_login {
+  vertical-align: middle !important;
 }
 #itemform_extra label.ffield_item_create_user {
   padding: 0;
@@ -1460,9 +1448,6 @@ table.diff td.diff-title-addedline {
 .timestamp .time {
   font-size: 84%;
 }
-.compact_data {
-  white-space: nowrap;
-}
 #skin_wrapper .email_wrap .email_payload > p:first-child {
   margin-top: 10px;
 }
@@ -1653,4 +1638,11 @@ table.diff td.diff-title-addedline {
 .jeditable_cell select,
 .jeditable_cell input {
   max-width: 100%;
+}
+div.query-builder .rule-container .rule-value-container {
+  border: none;
+  padding-left: 0;
+}
+.ui-effects-transfer {
+  border: 1px solid #F00;
 }

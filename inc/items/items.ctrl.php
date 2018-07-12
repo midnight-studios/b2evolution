@@ -1485,8 +1485,10 @@ switch( $action )
 			$edited_Item->handle_notifications();
 
 			// Set redirect back to items list with new item type tab:
-			$tab = get_tab_by_item_type_usage( $edited_Item->get_type_setting( 'usage' ) );
-			$redirect_to = $admin_url.'?ctrl=items&blog='.$Blog->ID.'&tab=type&tab_type='.( $tab ? $tab[0] : 'post' ).'&filter=restore';
+			$tab = param( 'tab', 'string', 'type' );
+			$tab_type = get_tab_by_item_type_usage( $edited_Item->get_type_setting( 'usage' ) );
+			$tab_type_param = ( $tab == 'type' ? '&tab_type='.( $tab_type ? $tab_type[0] : 'post' ) : '' );
+			$redirect_to = $admin_url.'?ctrl=items&blog='.$Blog->ID.'&tab='.$tab.$tab_type_param.'&filter=restore';
 
 			// Highlight the updated item in list
 			$Session->set( 'highlight_id', $edited_Item->ID );
@@ -1885,6 +1887,8 @@ function init_list_mode()
 
 	// Set different filterset name for each different tab and tab_type
 	$filterset_name = ( $tab == 'type' ) ? $tab.'_'.utf8_strtolower( $tab_type ) : $tab;
+	// Append collection ID to filterset in order to keep filters separately per collection:
+	$filterset_name .= $Blog->ID;
 
 	// Create empty List:
 	$ItemList = new ItemList2( $Blog, NULL, NULL, $UserSettings->get('results_per_page'), 'ItemCache', $items_list_param_prefix, $filterset_name /* filterset name */ ); // COPY (func)
@@ -2191,7 +2195,7 @@ if( !empty( $Blog ) )
 }
 */
 
-if( $action == 'view' || strpos( $action, 'edit' ) !== false || strpos( $action, 'new' ) !== false )
+if( $action == 'view' || strpos( $action, 'edit' ) !== false || strpos( $action, 'new' ) !== false || $action == 'copy' )
 {	// Initialize js to autocomplete usernames in post/comment form
 	init_autocomplete_usernames_js();
 	// Require colorbox js:

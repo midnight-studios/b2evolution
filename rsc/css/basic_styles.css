@@ -69,6 +69,10 @@ code {
       -ms-hyphens: none;
           hyphens: none;
 }
+code {
+  background-color: rgba(27, 31, 35, 0.05);
+  color: #24292e;
+}
 img {
   border: none;
   max-width: 100%;
@@ -1046,6 +1050,7 @@ span.roundbutton.rbtn_black:hover,
   border: 1px solid transparent;
   border-radius: 4px;
   box-sizing: border-box;
+  padding: 1px 7px 2px;
 }
 .btn:hover,
 .btn:focus {

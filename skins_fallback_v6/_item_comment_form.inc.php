@@ -58,8 +58,12 @@ $params = array_merge( array(
 			) ),
 		'comment_mode'         => '', // Can be 'quote' from GET request
 		'comment_type'         => 'comment',
+		'comment_title_before'  => '<div class="panel-heading"><h4 class="evo_comment_title panel-title">',
+		'comment_title_after'   => '</h4></div><div class="panel-body">',
 		'comment_rating_before' => '<div class="evo_comment_rating">',
 		'comment_rating_after'  => '</div>',
+		'comment_text_before'   => '<div class="evo_comment_text">',
+		'comment_text_after'    => '</div>',
 		'comment_info_before'   => '<footer class="evo_comment_footer clear text-muted"><small>',
 		'comment_info_after'    => '</small></footer></div>',
 	), $params );
@@ -322,7 +326,7 @@ function validateCommentForm(form)
 			$comment_author_email = $current_User->email;
 		}
 		// Note: we use funky field names to defeat the most basic guestbook spam bots
-		$Form->text( $dummy_fields[ 'name' ], $comment_author, 40, T_('Name'), '', 100, 'evo_comment_field' );
+		$Form->text( $dummy_fields[ 'name' ], $comment_author, 40, T_('Name'), '<br />'.sprintf( T_('<a %s>Click here to log in</a> if you already have an account on this site.'), 'href="'.get_login_url( 'comment form', $Item->get_permanent_url() ).'" style="font-weight:bold"' ), 100, 'evo_comment_field' );
 
 		$Form->email_input( $dummy_fields[ 'email' ], $comment_author_email, 40, T_('Email'), array(
 			'bottom_note' => T_('Your email address will <strong>not</strong> be revealed on this site.'),
@@ -396,6 +400,8 @@ function validateCommentForm(form)
 
 	// Set prefix for js code in plugins:
 	$plugin_js_prefix = ( $params['comment_type'] == 'meta' ? 'meta_' : '' );
+
+	$Plugins->trigger_event( 'DisplayCommentFormFieldsetAboveComment', array( 'Form' => & $Form, 'Item' => & $Item ) );
 
 	ob_start();
 	echo '<div class="comment_toolbars">';

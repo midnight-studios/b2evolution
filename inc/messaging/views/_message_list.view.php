@@ -307,6 +307,11 @@ if( $is_recipient )
 				$Form->info_field( '', T_( 'The other users involved in this conversation have closed their account.' ) );
 			}
 
+			$Plugins->trigger_event( 'DisplayMessageFormFieldsetAboveMessage', array(
+					'Form'              => & $Form,
+					'form_use_fieldset' => false,
+				) );
+
 			ob_start();
 			echo '<div class="message_toolbars">';
 			// CALL PLUGINS NOW:
@@ -345,7 +350,7 @@ if( $is_recipient )
 			}
 
 		$Form->end_form( array(
-				array( 'submit', 'actionArray[preview]', T_('Preview'), 'SaveButton btn-info' ),
+				array( 'submit', 'actionArray[preview]', /* TRANS: Verb */ T_('Preview'), 'SaveButton btn-info' ),
 				array( 'submit', 'actionArray[create]', T_('Send message'), 'SaveButton' )
 			) );
 

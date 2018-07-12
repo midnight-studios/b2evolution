@@ -153,7 +153,7 @@ function set_contact_blocked( $user_ID, $blocked )
  */
 function create_new_thread()
 {
-	global $Settings, $current_User, $Messages, $edited_Thread, $edited_Message, $action;
+	global $Settings, $current_User, $Messages, $edited_Thread, $edited_Message, $action, $Plugins;
 
 	// Insert new thread:
 	$edited_Thread = new Thread();
@@ -171,6 +171,9 @@ function create_new_thread()
 
 	param( 'thrd_recipients', 'string' );
 	param( 'thrd_recipients_array', 'array' );
+
+	// Trigger event: a Plugin could add a $category="error" message here..
+	$Plugins->trigger_event( 'MessageFormSent', array( 'is_preview' => ( $action == 'preview' ) ) );
 
 	// Load data from request
 	if( $edited_Message->load_from_Request() )
@@ -215,7 +218,7 @@ function create_new_thread()
  */
 function create_new_message( $thrd_ID )
 {
-	global $Settings, $current_User, $Messages, $edited_Message, $action;
+	global $Settings, $current_User, $Messages, $edited_Message, $action, $Plugins;
 
 	// Insert new message:
 	$edited_Message = new Message();
@@ -229,6 +232,9 @@ function create_new_message( $thrd_ID )
 		$Messages->add( T_('You cannot send a message at this time because the system is under maintenance. Please try again in a few moments.'), 'error' );
 		return false;
 	}
+
+	// Trigger event: a Plugin could add a $category="error" message here..
+	$Plugins->trigger_event( 'MessageFormSent', array( 'is_preview' => ( $action == 'preview' ) ) );
 
 	// Load data from request
 	if( $edited_Message->load_from_Request() )
@@ -1786,7 +1792,7 @@ function delete_orphan_threads( $user_ids = NULL )
 	{ // There are orphan threads ( or orphan thread targets )
 		load_class( 'messaging/model/_thread.class.php', 'Thread' );
 		// Delete all orphan threads with all cascade relations
-		if( Thread::db_delete_where( 'Thread', NULL, $orphan_thread_ids, array( 'use_transaction' => false ) ) === false )
+		if( Thread::db_delete_where( NULL, $orphan_thread_ids, array( 'use_transaction' => false ) ) === false )
 		{ // Deleting orphan threads failed
 			$DB->rollback();
 			return false;

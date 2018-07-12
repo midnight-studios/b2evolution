@@ -230,7 +230,7 @@ function get_login_url( $source, $redirect_to = NULL, $force_normal_login = fals
 		$url = $Blog->get( $blog_page, array( 'glue' => '&' ) );
 	}
 	else
-	{ // Use normal/standard login form (without blog skin)
+	{ // Use normal/basic login form (without blog skin)
 		if( ! empty( $redirect_url ) )
 		{
 			$redirect_url = url_rel_to_same_host( $redirect_url, get_htsrv_url( true ) );
@@ -1990,42 +1990,13 @@ function get_default_avatar_url( $gender = '', $size = NULL )
 /**
  * Convert seconds to months, days, hours, minutes and seconds format
  *
+ * @deprecated since version 6.10.1-stable: Use seconds_to_period()
  * @param integer seconds
  * @return string
  */
 function duration_format( $duration, $show_seconds = true )
 {
-	$result = '';
-
-	$fields = get_duration_fields( $duration );
-	if( $fields[ 'months' ] > 0 )
-	{
-		$result .= sprintf( T_( '%d months' ), $fields[ 'months' ] ).' ';
-	}
-	if( $fields[ 'days' ] > 0 )
-	{
-		$result .= sprintf( T_( '%d days' ), $fields[ 'days' ] ).' ';
-	}
-	if( $fields[ 'hours' ] > 0 )
-	{
-		$result .= sprintf( T_( '%d hours' ), $fields[ 'hours' ] ).' ';
-	}
-	if( $fields[ 'minutes' ] > 0 )
-	{
-		$result .= sprintf( T_( '%d minutes' ), $fields[ 'minutes' ] ).' ';
-	}
-	if( $show_seconds && ( $fields[ 'seconds' ] > 0 ) )
-	{
-		$result .= sprintf( T_( '%d seconds' ),  $fields[ 'seconds' ] );
-	}
-
-	$result = trim( $result );
-	if( empty( $result ) )
-	{
-		$result = '0';
-	}
-
-	return $result;
+	return seconds_to_period( $duration );
 }
 
 
@@ -2779,14 +2750,67 @@ function get_usertab_header( $edited_User, $user_tab, $user_tab_title )
 	return '<div class="user_header">'.$result.'</div>'.'<div class="clear"></div>';
 }
 
+
+/**
+ * Insert or update user profile visit
+ *
+ * @param integer ID of user whose profile is viewed
+ * @param integer ID of user who is viewing the profile
+ * @return mixed # of rows affected or false if error
+ */
 function add_user_profile_visit( $user_ID, $visitor_user_ID )
 {
 	global $DB, $servertimenow;
 
 	$timestamp = date2mysql( $servertimenow );
 
+	$SQL = new SQL();
+	$SQL->SELECT( '*' );
+	$SQL->FROM( 'T_users__profile_visit_counters' );
+	$SQL->FROM_add( 'LEFT JOIN T_users__profile_visits ON upv_visited_user_ID = upvc_user_ID AND upv_visitor_user_ID = '.$DB->quote( $visitor_user_ID ) );
+	$SQL->WHERE( 'upvc_user_ID = '.$DB->quote( $user_ID ) );
+	$counter_row = $DB->get_row( $SQL->get(), ARRAY_A );
+
+	if( $counter_row )
+	{
+		if( empty( $counter_row['upv_last_visit_ts'] ) )
+		{ // Increment total new unique visitor
+			$DB->query( 'UPDATE T_users__profile_visit_counters
+					SET upvc_total_unique_visitors = upvc_total_unique_visitors + 1,
+							upvc_new_unique_visitors = upvc_new_unique_visitors + 1
+					WHERE upvc_user_ID = '.$DB->quote( $user_ID ) );
+		}
+		elseif( $counter_row['upv_last_visit_ts'] < $counter_row['upvc_last_view_ts'] )
+		{ // Increment new unique visitors only
+			$DB->query( 'UPDATE T_users__profile_visit_counters
+					SET upvc_new_unique_visitors = upvc_new_unique_visitors + 1
+					WHERE upvc_user_ID = '.$DB->quote( $user_ID ) );
+		}
+	}
+	else
+	{ // First profile visit
+		$DB->query( 'INSERT INTO T_users__profile_visit_counters( upvc_user_ID, upvc_total_unique_visitors, upvc_new_unique_visitors ) VALUES ( '.$DB->quote( $user_ID ).', 1, 1 )' );
+	}
+
 	return $DB->query( 'REPLACE INTO T_users__profile_visits( upv_visited_user_ID, upv_visitor_user_ID, upv_last_visit_ts )
 			VALUES ( '.$user_ID.', '.$visitor_user_ID.', "'.$timestamp.'" )' );
+}
+
+
+/**
+ * Reset new unique user profile view counter and timestamp
+ *
+ * @param integer User ID
+ * @return mixed # of rows affected or false if error
+ */
+function reset_user_profile_view_ts( $user_ID )
+{
+	global $DB, $servertimenow;
+
+	$timestamp = date2mysql( $servertimenow );
+
+	return $DB->query( 'UPDATE T_users__profile_visit_counters SET upvc_new_unique_visitors = 0, upvc_last_view_ts = "'.$timestamp.'"
+			WHERE upvc_user_ID = '.$DB->quote( $user_ID ) );
 }
 
 
@@ -3029,6 +3053,88 @@ function send_easy_validate_emails( $user_ids, $is_reminder = true, $email_chang
 				$reminder_sent_to_user = $UserSettings->get( 'activation_reminder_count', $User->ID );
 				$UserSettings->set( 'activation_reminder_count', $reminder_sent_to_user + 1, $User->ID );
 			}
+			$UserSettings->dbupdate();
+			if( $log_messages == 'cron_job' )
+			{	// Log success mail sending for cron job:
+				cron_log_action_end( 'User '.$User->get_identity_link().' has been notified' );
+			}
+		}
+		elseif( $log_messages == 'cron_job' )
+		{	// Log failed mail sending for cron job:
+			global $mail_log_message;
+			cron_log_action_end( 'User '.$User->get_identity_link().' could not be notified because of error: '
+				.'"'.( empty( $mail_log_message ) ? 'Unknown Error' : $mail_log_message ).'"', 'warning' );
+		}
+	}
+
+	if( $email_sent && isset( $Session ) && $redirect_to_after !== NULL )
+	{	// Set a redirect_to session variable because this way after the account will be activated we will know where to redirect
+		$Session->set( 'core.activateacc.redirect_to', $redirect_to_after  );
+		$Session->dbsave(); // save immediately
+	}
+
+	return $email_sent;
+}
+
+
+/**
+ * Send inactive account email notification
+ *
+ * @param array user ids to send email
+ * @param string URL, where to redirect the user after he clicked the validation link (gets saved in Session).
+ * @param boolean|string 'cron_job' - to log messages for cron job, FALSE - to don't log
+ * @return integer the number of successfully sent emails
+ */
+function send_inactive_user_emails( $user_ids, $redirect_to_after = NULL, $log_messages = false )
+{
+	global $UserSettings, $Session, $Settings, $servertimenow;
+
+	$UserCache = & get_UserCache();
+
+	$cache_by_locale = array();
+	$email_sent = 0;
+	foreach( $user_ids as $user_ID )
+	{ // Iterate through user ids and send account activation reminder to all user
+		$User = $UserCache->get_by_ID( $user_ID, false );
+		if( !$User )
+		{ // user not exists
+			continue;
+		}
+
+		if( !$UserSettings->get( 'send_inactive_reminder' ) )
+		{ // This is an activation reminder, but user wouldn't like to receive this kind of emails
+			continue;
+		}
+
+		if( mail_is_blocked( $User->get( 'email' ) ) )
+		{ // prevent trying to send an email to a blocked email address
+			continue;
+		}
+
+		$notify_locale = $User->get( 'locale' );
+		if( ! isset($cache_by_locale[$notify_locale]) )
+		{ // No subject for this locale generated yet:
+			locale_temp_switch( $notify_locale );
+
+			$cache_by_locale[$notify_locale]['subject'] = sprintf( T_('We haven\'t seen you on %s for %s.'), $Settings->get( 'notification_short_name' ), seconds_to_period( $Settings->get( 'inactive_account_reminder_threshold' ) ) );
+
+			locale_restore_previous();
+		}
+
+		$login_Blog = & get_setting_Blog( 'login_blog_ID' );
+		$email_template_params = array(
+				'User' => $User,
+				'login_Blog' => $login_Blog
+			);
+
+		// Update notification sender's info from General settings
+		$User->update_sender( true );
+
+		if( send_mail_to_User( $User->ID, $cache_by_locale[$notify_locale]['subject'], 'account_inactive', $email_template_params, true ) )
+		{ // save corresponding user settings right after the email was sent, to prevent not saving if an eroor occurs
+			$email_sent++;
+			// Set last remind activation email date and increase sent reminder emails number in UserSettings
+			$UserSettings->set( 'last_inactive_status_email', date2mysql( $servertimenow ), $User->ID );
 			$UserSettings->dbupdate();
 			if( $log_messages == 'cron_job' )
 			{	// Log success mail sending for cron job:
@@ -3452,7 +3558,14 @@ function callback_filter_userlist( & $Form )
 	global $Settings, $current_User, $Collection, $Blog, $edited_Organization, $edited_Newsletter, $edited_EmailCampaign;
 	global $registered_min, $registered_max;
 
-	$filters = array();
+	$filters = array(
+		// Set default filters which are displayed on not filtered list:
+		'#default' => array(
+			'gender'   => '',
+			'criteria' => '0:contains:',
+			'lastseen' => '',
+		)
+	);
 
 	$Form->hidden( 'filter', 'new' );
 
@@ -3462,49 +3575,6 @@ function callback_filter_userlist( & $Form )
 	}
 
 	$Form->text( 'keywords', get_param('keywords'), 20, T_('Name'), '', 50 );
-
-	$Form->checkbox( 'gender_men', get_param('gender_men'), T_('Men') );
-	$Form->checkbox( 'gender_women', get_param('gender_women'), T_('Women') );
-	$Form->checkbox( 'gender_other', get_param('gender_other'), T_('Other') );
-
-	if( is_admin_page() )
-	{ // show this filters only on admin interface
-		if( $current_User->check_perm( 'users', 'edit' ) )
-		{ // Show "Reported users" filter only for users with edit user permission
-			$Form->checkbox( 'reported', get_param('reported'), T_('Reported users') );
-		}
-
-		// Primary group:
-		$GroupCache = new DataObjectCache( 'Group', true, 'T_groups', 'grp_', 'grp_ID', 'grp_name', 'grp_level DESC, grp_name ASC' );
-		$GroupCache->load_where( 'grp_usage = "primary"' );
-		$GroupCache->all_loaded = true;
-		$group_options_array = array(
-				'-1' => T_('All (Ungrouped)'),
-				'0'  => T_('All (Grouped)'),
-			) + $GroupCache->get_option_array_worker( 'get_name_without_level' );
-		$Form->select_input_array( 'group', get_param('group'), $group_options_array,
-			sprintf( T_('<span %s>Primary</span> Group'), 'class="label label-primary"' ),
-			'', array( 'force_keys_as_values' => true ) );
-
-		// Secondary group:
-		$GroupCache->clear();
-		$GroupCache->load_where( 'grp_usage = "secondary"' );
-		$GroupCache->all_loaded = true;
-		$group_options_array = array(
-				'0'  => T_('All'),
-			) + $GroupCache->get_option_array_worker( 'get_name_without_level' );
-		$Form->select_input_array( 'group2', get_param('group2'), $group_options_array,
-			sprintf( T_('<span %s>Secondary</span> Group'), 'class="label label-info"' ),
-			'', array( 'force_keys_as_values' => true ) );
-
-		$Form->select_input_array( 'account_status', get_param('account_status'), get_user_statuses( T_('All') ), T_('Account status') );
-
-		// Filter by registered date
-		$Form->begin_line( T_('Registered from'), 'registered_min' );
-		$Form->date_input( 'registered_min', $registered_min, '' );
-		$Form->date_input( 'registered_max', $registered_max, T_('to') );
-		$Form->end_line();
-	}
 
 	$location_filter_displayed = false;
 	if( user_country_visible() )
@@ -3554,57 +3624,6 @@ function callback_filter_userlist( & $Form )
 		$Form->text( 'age_max', get_param('age_max'), 3, T_('to') );
 	$Form->end_line();
 
-	$Form->begin_line( T_('Level'), 'level_min' );
-		$Form->text( 'level_min', get_param('level_min'), 3, '' );
-		$Form->text( 'level_max', get_param('level_max'), 3, T_('to') );
-	$Form->end_line();
-
-	if( empty( $edited_Organization ) )
-	{ // Show organization filter only when organization form is not selected
-		$OrganizationCache = & get_OrganizationCache( T_('All') );
-		$OrganizationCache->load_all();
-		if( count( $OrganizationCache->cache ) > 0 )
-		{
-			$Form->select_input_object( 'org', get_param('org'), $OrganizationCache, T_('Organization'), array( 'allow_none' => true ) );
-		}
-	}
-
-	if( is_admin_page() && empty( $edited_Newsletter ) && empty( $edited_EmailCampaign ) )
-	{	// Filter by newsletter only on back-office and don't display on newsletter and email campaign edit forms:
-		$NewsletterCache = & get_NewsletterCache( T_('All') );
-		$NewsletterCache->load_all();
-		if( count( $NewsletterCache->cache ) > 0 )
-		{
-			$Form->begin_line( T_('Subscribed to') );
-				$Form->select_input_object( 'newsletter', get_param( 'newsletter' ), $NewsletterCache, '', array( 'allow_none' => true ) );
-				$Form->select_input_object( 'not_newsletter', get_param( 'not_newsletter' ), $NewsletterCache, '<label>'./* TRANS: Full sentence is "Subscribed to: <select> and not to: <select>"*/T_('and not to').':</label>', array( 'allow_none' => true ) );
-			$Form->end_line();
-		}
-	}
-
-	if( is_admin_page() && $current_User->check_perm( 'users', 'moderate' ) )
-	{	// Filter by user tags only on back-office and if current user can moderate other users:
-		$Form->begin_line( T_('Has all these tags'), 'user_tag' );
-			$Form->usertag_input( 'user_tag', get_param( 'user_tag' ), 20, '', '', array(
-				'maxlength' => 255,
-				'input_prefix' => '<div class="input-group user_admin_tags" style="width: 250px;">',
-				'input_suffix'=> '</div>' ) );
-			$Form->usertag_input( 'not_user_tag', get_param( 'not_user_tag' ), 20, T_('but not any of these tags'), '', array(
-				'maxlength' => 255,
-				'input_prefix' => '<div class="input-group user_admin_tags" style="width: 250px;">',
-				'input_suffix'=> '</div>' ) );
-		$Form->end_line();
-	}
-
-	if( is_admin_page() )
-	{
-		if( $current_User->check_perm( 'users', 'edit' ) )
-		{
-			$Form->checkbox( 'custom_sender_email', get_param('custom_sender_email'), T_('Users with custom sender address') );
-			$Form->checkbox( 'custom_sender_name', get_param('custom_sender_name'), T_('Users with custom sender name') );
-		}
-	}
-
 	if( is_admin_page() && $edited_EmailCampaign )
 	{
 		$campaign_send_status = array(
@@ -3618,35 +3637,104 @@ function callback_filter_userlist( & $Form )
 	}
 	echo '<br />';
 
+	// Gender:
+	if( is_admin_page() || ( isset( $Blog ) && $Blog->get_setting( 'userdir_filter_gender' ) ) )
+	{	// Show gender filter only on back-office or if it is allowed by collection setting on front-office:
+		$filters['gender'] = array(
+				'label'  => T_('Gender'),
+				'input'  => 'select',
+				'values' => array(
+						''  => T_('Any'),
+						'M' => T_('Men'),
+						'F' => T_('Women'),
+						'O' => T_('Other'),
+					),
+				'validation' => array( 'allow_empty_value' => 'true' ),
+			);
+	}
+
+	// Level:
+	if( is_admin_page() || ( isset( $Blog ) && $Blog->get_setting( 'userdir_filter_level' ) ) )
+	{	// Show user level filter only on back-office or if it is allowed by collection setting on front-office:
+		$filters['level'] = array(
+				'label'     => T_('User level'),
+				'operators' => '=,!=,<,<=,>,>=,between,not_between',
+				'input'     => 'select',
+				'type'      => 'integer',
+				'values'    => array( 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10 ),
+			);
+	}
+
+	// Organization:
+	if( ( is_admin_page() && empty( $edited_Organization ) ) ||
+	    ( ! is_admin_page() && isset( $Blog ) && $Blog->get_setting( 'userdir_filter_org' ) ) )
+	{	// Show organization filter only when organization form is not selected on back-office or if it is allowed by collection setting on front-office:
+		$OrganizationCache = & get_OrganizationCache( T_('All') );
+		$OrganizationCache->load_all();
+		$filters['org'] = array(
+				'label'  => T_('Organization'),
+				'input'  => 'select',
+				'values' => $OrganizationCache->get_option_array(),
+			);
+	}
+
+	if( is_admin_page() && $current_User->check_perm( 'users', 'edit' ) )
+	{
+		// Uses custom sender address:
+		$filters['custom_sender_email'] = array(
+				'label'     => T_('Uses custom sender address'),
+				'operators' => 'blank',
+				'input'     => 'radio',
+				'values'    => array(
+						'yes' => T_('yes'),
+						'no'  => T_('no')
+					),
+			);
+
+		// Uses custom sender name:
+		$filters['custom_sender_name'] = array(
+				'label'     => T_('Uses custom sender name'),
+				'operators' => 'blank',
+				'input'     => 'radio',
+				'values'    => array(
+						'yes' => T_('yes'),
+						'no'  => T_('no')
+					),
+			);
+	}
+
 	// Specific criteria:
-	$Form->output = false;
-	$Form->switch_layout( 'none' );
-	global $user_fields_empty_name;
-	$user_fields_empty_name = /* TRANS: verb */ T_('Select').'...';
-	$criteria_input = $Form->select_input_array( 'criteria_operator[]', '', array( 'contains' => T_('contains'), 'not_contains' => T_('doesn\'t contain') ), '' );
-	$criteria_input .= $Form->text( 'criteria_value[]', '', 17, '', '', 50 );
-	$criteria_input = $Form->select_input( 'criteria_type[]', '', 'callback_options_user_new_fields', '', array( 'field_suffix' => $criteria_input ) );
-	$Form->switch_layout( NULL );
-	$Form->output = true;
-	$filters['criteria'] = array(
-			'label' => T_('Specific criteria'),
-			'operators' => 'blank',
-			'input' => 'function( rule, input_name ) { return \''.format_to_js( $criteria_input ).'\'; }',
-			'validation' => array( 'allow_empty_value' => 'true' ),
-			'valueGetter' => 'function( rule )
-				{
-					return rule.$el.find(".rule-value-container [name^=criteria_type]").val()
-						+ ":" + rule.$el.find(".rule-value-container [name^=criteria_operator]").val()
-						+ ":" + rule.$el.find(".rule-value-container [name^=criteria_value]").val();
-				}',
-			'valueSetter' => 'function( rule, value )
-				{
-					var val = value.split( ":" );
-					rule.$el.find( ".rule-value-container [name^=criteria_type]" ).val( val[0] ).trigger( "change" );
-					rule.$el.find( ".rule-value-container [name^=criteria_operator]" ).val( val[1] ).trigger( "change" );
-					rule.$el.find( ".rule-value-container [name^=criteria_value]" ).val( val[2] ).trigger( "change" );
-				}'
-		);
+	if( is_admin_page() || ( isset( $Blog ) && $Blog->get_setting( 'userdir_filter_criteria' ) ) )
+	{	// Show specific criteria filter only on back-office or if it is allowed by collection setting on front-office:
+		$Form->output = false;
+		$Form->switch_layout( 'none' );
+		global $user_fields_empty_name;
+		$user_fields_empty_name = /* TRANS: verb */ T_('Select').'...';
+		$criteria_input = $Form->select_input_array( 'criteria_operator[]', '', array( 'contains' => T_('contains'), 'not_contains' => T_('doesn\'t contain') ), '' );
+		$criteria_input .= $Form->text( 'criteria_value[]', '', 17, '', '', 50 );
+		$criteria_input = $Form->select_input( 'criteria_type[]', '', 'callback_options_user_new_fields', '', array( 'field_suffix' => $criteria_input ) );
+		$Form->switch_layout( NULL );
+		$Form->output = true;
+		$filters['criteria'] = array(
+				'label' => T_('Specific criteria'),
+				'operators' => 'blank',
+				'input' => 'function( rule, input_name ) { return \''.format_to_js( $criteria_input ).'\'; }',
+				'validation' => array( 'allow_empty_value' => 'true' ),
+				'valueGetter' => 'function( rule )
+					{
+						return rule.$el.find(".rule-value-container [name^=criteria_type]").val()
+							+ ":" + rule.$el.find(".rule-value-container [name^=criteria_operator]").val()
+							+ ":" + rule.$el.find(".rule-value-container [name^=criteria_value]").val();
+					}',
+				'valueSetter' => 'function( rule, value )
+					{
+						var val = value.split( ":" );
+						rule.$el.find( ".rule-value-container [name^=criteria_type]" ).val( val[0] ).trigger( "change" );
+						rule.$el.find( ".rule-value-container [name^=criteria_operator]" ).val( val[1] ).trigger( "change" );
+						rule.$el.find( ".rule-value-container [name^=criteria_value]" ).val( val[2] ).trigger( "change" );
+					}'
+			);
+	}
 
 	if( user_region_visible() )
 	{	// JS functions for AJAX loading of regions, subregions & cities
@@ -3740,16 +3828,157 @@ function load_cities( country_ID, region_ID, subregion_ID )
 	{	// If current user can moderate other users:
 
 		// User last seen:
-		$filters['lastseen'] = array(
-				'label' => T_('User last seen'),
-				'type'  => 'date',
+		if( is_admin_page() || ( isset( $Blog ) && $Blog->get_setting( 'userdir_filter_lastseen' ) ) )
+		{	// Show user last seen filter only on back-office or if it is allowed by collection setting on front-office:
+			$filters['lastseen'] = array(
+					'label'      => T_('User last seen'),
+					'type'       => 'date',
+					'validation' => array( 'allow_empty_value' => 'true' ),
+				);
+		}
+
+		if( is_admin_page() )
+		{	// Registration source:
+			$filters['source'] = array(
+					'label'      => T_('Registration source'),
+					'operators'  => 'contains,not_contains',
+				);
+		}
+	}
+
+	if( is_admin_page() )
+	{	// Filters only for back-office:
+		if( $current_User->check_perm( 'users', 'edit' ) )
+		{	// Allow "Report count" filter only for users with edit user permission:
+			$filters['report_count'] = array(
+					'label'         => T_('Report count'),
+					'type'          => 'integer',
+					'operators'     => 'greater_or_equal',
+					'default_value' => 1,
+				);
+		}
+
+		// Primary group:
+		$GroupCache = new DataObjectCache( 'Group', true, 'T_groups', 'grp_', 'grp_ID', 'grp_name', 'grp_level DESC, grp_name ASC' );
+		$GroupCache->load_where( 'grp_usage = "primary"' );
+		$GroupCache->all_loaded = true;
+		$group_options_array = array(
+				'-1' => T_('All (Ungrouped)'),
+				'0'  => T_('All (Grouped)'),
+			) + $GroupCache->get_option_array_worker( 'get_name_without_level' );
+		$OrganizationCache = & get_OrganizationCache( T_('All') );
+		$OrganizationCache->load_all();
+		$filters['group'] = array(
+				'label'  => T_('Primary Group'),
+				'type'   => 'integer',
+				'input'  => 'select',
+				'values' => $group_options_array,
 			);
 
-		// Registration source:
-		$filters['source'] = array(
-				'label' => T_('Registration source'),
-				'operators' => 'contains,not_contains',
+		// Secondary group:
+		$GroupCache->clear();
+		$GroupCache->load_where( 'grp_usage = "secondary"' );
+		$GroupCache->all_loaded = true;
+		$group_options_array = array(
+				'0'  => T_('All'),
+			) + $GroupCache->get_option_array_worker( 'get_name_without_level' );
+		$filters['group2'] = array(
+				'label'  => T_('Secondary Group'),
+				'type'   => 'integer',
+				'input'  => 'select',
+				'values' => $group_options_array,
 			);
+
+		// Account status:
+		$filters['status'] = array(
+				'label'  => T_('Account status'),
+				'input'  => 'select',
+				'values' => get_user_statuses(),
+			);
+
+		// Registered from:
+		$filters['regdate'] = array(
+				'label'      => T_('Registration date'),
+				'type'       => 'date',
+				'validation' => array( 'allow_empty_value' => 'true' ),
+			);
+
+		// Subscribed to:
+		if( empty( $edited_Newsletter ) && empty( $edited_EmailCampaign ) )
+		{	// Filter by newsletter(except of newsletter and email campaign edit forms):
+			$NewsletterCache = & get_NewsletterCache();
+			$NewsletterCache->load_all();
+			if( count( $NewsletterCache->cache ) > 0 )
+			{
+				$filters['newsletter'] = array(
+						'label'  => T_('Subscribed to'),
+						'type'   => 'integer',
+						'input'  => 'select',
+						'values' => $NewsletterCache->get_option_array_worker(),
+					);
+			}
+		}
+
+		if( $current_User->check_perm( 'users', 'moderate' ) )
+		{	// Filter by user tags if current user can moderate other users:
+			$filters['tags'] = array(
+					'label'  => T_('User tags'),
+					'valueGetter' => 'evo_get_filter_user_tags',
+					'valueSetter' => 'evo_set_filter_user_tags',
+					'operators'   => 'user_tagged,user_not_tagged',
+				);
+?>
+<script type="text/javascript">
+function evo_get_filter_user_tags( rule )
+{
+	var input_name = rule.$el.find( ".rule-value-container input" ).attr( "name" );
+	var selector = 'input[name=' + input_name + ']';
+	if( typeof( initialized_filter_user_tags ) == "undefined" )
+	{
+		initialized_filter_user_tags = new Array();
+	}
+
+	if( input_name == undefined || initialized_filter_user_tags.indexOf( input_name ) !== -1 )
+	{	// Don't initialize twice:
+		return jQuery( selector ).val();
+	}
+
+	jQuery( selector ).tokenInput( '<?php echo get_restapi_url().'usertags'; ?>',
+	{
+		theme: 'facebook',
+		queryParam: 's',
+		propertyToSearch: 'name',
+		tokenValue: 'name',
+		preventDuplicates: true,
+		hintText: '<?php echo TS_('Type in a tag'); ?>',
+		noResultsText: '<?php echo TS_('No results'); ?>',
+		searchingText: '<?php echo TS_('Searching...'); ?>',
+		jsonContainer: 'tags',
+	} );
+
+	<?php echo get_prevent_key_enter_js( 'input[name=" + input_name + "]' ); ?>
+	
+	jQuery( selector ).prev().before( jQuery( selector ) );
+
+	initialized_filter_user_tags.push( input_name );
+
+	return jQuery( selector ).val();
+}
+
+function evo_set_filter_user_tags( rule, value )
+{
+	if( value != "" )
+	{
+		tags = value.split( "," );
+		for( var t in tags )
+		{
+			jQuery( "input[name=" + rule.$el.find( ".rule-value-container input" ).attr( "name" ) + "]" ).tokenInput( "add", { id: tags[t], name: tags[t] } );
+		}
+	}
+}
+</script>
+<?php
+		}
 	}
 
 	return $filters;
@@ -5030,14 +5259,14 @@ function echo_user_remove_membership_js( $edited_Organization )
  *        ''      - Don't display a field of invitation code
  *        'info'  - Display an info field with invitation code
  *        'input' - Display an input field to change invitation code
- *        'deny'  - Don't display a registration form at all
+ *        'deny'  - Don't display a registration form at all because registration is disabled or system is locked
  */
 function check_invitation_code( $invitation_name = 'invitation' )
 {
 	global $Settings;
 
-	if( $Settings->get( 'newusers_canregister' ) == 'no' )
-	{ // Don't display a registration form when it is disabled for all
+	if( $Settings->get( 'system_lock' ) || $Settings->get( 'newusers_canregister' ) == 'no' )
+	{	// Don't display a registration form when it is disabled for all or sysytem is locked:
 		return 'deny';
 	}
 
@@ -5464,74 +5693,78 @@ function merge_users( $merging_user_ID, $remaining_user_ID )
 	$merging_User = & $UserCache->get_by_ID( $merging_user_ID );
 	$remaining_User = & $UserCache->get_by_ID( $remaining_user_ID );
 
-	$merging_user_login =  get_user_identity_link( '', $merging_user_ID );
-	$remaining_user_login =  get_user_identity_link( '', $remaining_user_ID );
+	$merging_user_login = $merging_User->get_identity_link( array( 'thumb_class'  => 'avatar_before_login_middle') );
+	$remaining_user_login = $remaining_User->get_identity_link( array( 'thumb_class'  => 'avatar_before_login_middle') );
 
 	// Start panel of the merging log:
 	echo '<div class="panel panel-warning">';
 		echo '<div class="panel-heading"><h3 class="panel-title">'.sprintf( T_('Merging user %s:'), $merging_user_login ).'</h3></div>';
 		echo '<div class="panel-body">';
-			echo '<h3 class="evo_confirm_delete__title">'.T_('A merging of this user are doing the following actions:').'</h3>';
+			echo '<h3 class="evo_confirm_delete__title">'.sprintf( T_('Merging user data from %s to %s:'), $merging_user_login, $remaining_user_login ).'</h3>';
 
 	// Config what should be merged:
 	$merge_config = array(
-		// 0 - log message, 1 - db table name, 2 - db column name which should be merged:
-		array( T_('Moving user settings from %s to %s'),              'T_users__usersettings', 'uset_user_ID' ),
-		array( T_('Moving user fields from %s to %s'),                'T_users__fields', 'uf_user_ID' ),
-		array( T_('Moving user own organizations from %s to %s'),     'T_users__organization', 'org_owner_user_ID' ),
-		array( T_('Moving membership in organization from %s to %s'), 'T_users__user_org', 'uorg_user_ID' ),
-		array( T_('Moving user reports from %s to %s'),               'T_users__reports', 'urep_reporter_ID' ),
-		array( T_('Moving user secondary groups from %s to %s'),      'T_users__secondary_user_groups', 'sug_user_ID' ),
-		array( T_('Moving user tags from %s to %s'),                  'T_users__usertag', 'uutg_user_ID' ),
-		array( T_('Moving user visits from %s to %s'),                'T_users__profile_visits', 'upv_visitor_user_ID' ),
-		array( T_('Moving plugin settings from %s to %s'),            'T_pluginusersettings', 'puset_user_ID' ),
-		array( T_('Moving Collections from %s to %s'),                'T_blogs', 'blog_owner_user_ID' ),
-		array( T_('Moving collection permissions from %s to %s'),     'T_coll_user_perms', 'bloguser_user_ID' ),
-		array( T_('Moving collection subscriptions %s to %s'),        'T_subscriptions', 'sub_user_ID' ),
-		array( T_('Moving favorite collections from %s to %s'),       'T_coll_user_favs', 'cufv_user_ID' ),
-		array( T_('Moving own Posts from %s to %s'),                  'T_items__item', 'post_creator_user_ID' ),
-		array( T_('Moving edited Posts from %s to %s'),               'T_items__item', 'post_lastedit_user_ID' ),
-		array( T_('Moving assigned Posts from %s to %s'),             'T_items__item', 'post_assigned_user_ID' ),
-		array( T_('Moving post subscriptions from %s to %s'),         'T_items__subscriptions', 'isub_user_ID' ),
-		array( T_('Moving post read data from %s to %s'),             'T_items__user_data', 'itud_user_ID' ),
-		array( T_('Moving post edit histories from %s to %s'),        'T_items__version', 'iver_edit_user_ID' ),
-		array( T_('Moving post votes from %s to %s'),                 'T_items__votes', 'itvt_user_ID' ),
-		array( T_('Moving Comments from %s to %s'),                   'T_comments', 'comment_author_user_ID' ),
-		array( T_('Moving comment votes from %s to %s'),              'T_comments__votes', 'cmvt_user_ID' ),
-		array( T_('Moving private messages from %s to %s'),           'T_messaging__message', 'msg_author_user_ID' ),
-		array( T_('Moving thread read status from %s to %s'),         'T_messaging__threadstatus', 'tsta_user_ID' ),
-		array( T_('Moving contacts from %s to %s'),                   'T_messaging__contact', 'mct_from_user_ID' ),
-		array( T_('Moving to contact lists from %s to %s'),           'T_messaging__contact', 'mct_to_user_ID' ),
-		array( T_('Moving own contact groups from %s to %s'),         'T_messaging__contact_groups', 'cgr_user_ID' ),
-		array( T_('Moving to contact groups from %s to %s'),          'T_messaging__contact_groupusers', 'cgu_user_ID' ),
-		array( T_('Moving own Automations from %s to %s'),            'T_automation__automation', 'autm_owner_user_ID' ),
-		array( T_('Moving automation step states from %s to %s'),     'T_automation__user_state', 'aust_user_ID' ),
-		array( T_('Moving campaign send statuses from %s to %s'),     'T_email__campaign_send', 'csnd_user_ID' ),
-		array( T_('Moving email logs from %s to %s'),                 'T_email__log', 'emlog_user_ID' ),
-		array( T_('Moving newsletter subscriptions %s to %s'),        'T_email__newsletter_subscription', 'enls_user_ID' ),
-		array( T_('Moving own files %s to %s'),                       'T_files', 'file_creator_user_ID' ),
-		array( T_('Moving own file Links %s to %s'),                  'T_links', 'link_creator_user_ID' ),
-		array( T_('Moving edited file Links %s to %s'),               'T_links', 'link_lastedit_user_ID' ),
-		array( T_('Moving user file Links %s to %s'),                 'T_links', 'link_usr_ID' ),
-		array( T_('Moving file link votes %s to %s'),                 'T_links__vote', 'lvot_user_ID' ),
-		array( T_('Moving own Polls %s to %s'),                       'T_polls__question', 'pqst_owner_user_ID' ),
-		array( T_('Moving poll answers %s to %s'),                    'T_polls__answer', 'pans_user_ID' ),
-		array( T_('Moving sessions %s to %s'),                        'T_sessions', 'sess_user_ID' ),
-		array( T_('Moving system logs %s to %s'),                     'T_syslog', 'slg_user_ID' ),
+		// 0 - data title for log message, 1 - db table name, 2 - db column name which should be merged:
+		array( T_('User settings'),              'T_users__usersettings', 'uset_user_ID' ),
+		array( T_('User fields'),                'T_users__fields', 'uf_user_ID' ),
+		array( T_('User own organizations'),     'T_users__organization', 'org_owner_user_ID' ),
+		array( T_('Membership in organization'), 'T_users__user_org', 'uorg_user_ID' ),
+		array( T_('User reports'),               'T_users__reports', 'urep_reporter_ID' ),
+		array( T_('User secondary groups'),      'T_users__secondary_user_groups', 'sug_user_ID' ),
+		array( T_('User tags'),                  'T_users__usertag', 'uutg_user_ID' ),
+		array( T_('User visits'),                'T_users__profile_visits', 'upv_visitor_user_ID' ),
+		array( T_('Plugin settings'),            'T_pluginusersettings', 'puset_user_ID' ),
+		array( T_('Collections'),                'T_blogs', 'blog_owner_user_ID' ),
+		array( T_('Collection permissions'),     'T_coll_user_perms', 'bloguser_user_ID' ),
+		array( T_('Collection subscriptions'),   'T_subscriptions', 'sub_user_ID' ),
+		array( T_('Favorite collections'),       'T_coll_user_favs', 'cufv_user_ID' ),
+		array( T_('Own Posts'),                  'T_items__item', 'post_creator_user_ID' ),
+		array( T_('Edited Posts'),               'T_items__item', 'post_lastedit_user_ID' ),
+		array( T_('Assigned Posts'),             'T_items__item', 'post_assigned_user_ID' ),
+		array( T_('Post subscriptions'),         'T_items__subscriptions', 'isub_user_ID' ),
+		array( T_('Post read data'),             'T_items__user_data', 'itud_user_ID' ),
+		array( T_('Post edit histories'),        'T_items__version', 'iver_edit_user_ID' ),
+		array( T_('Post votes'),                 'T_items__votes', 'itvt_user_ID' ),
+		array( T_('Comments'),                   'T_comments', 'comment_author_user_ID' ),
+		array( T_('Comment votes'),              'T_comments__votes', 'cmvt_user_ID' ),
+		array( T_('Private Message'),            'T_messaging__message', 'msg_author_user_ID' ),
+		array( T_('Thread read status'),         'T_messaging__threadstatus', 'tsta_user_ID' ),
+		array( T_('Contacts'),                   'T_messaging__contact', 'mct_from_user_ID' ),
+		array( T_('Contact lists'),              'T_messaging__contact', 'mct_to_user_ID' ),
+		array( T_('Own contact groups'),         'T_messaging__contact_groups', 'cgr_user_ID' ),
+		array( T_('Contact Groups'),             'T_messaging__contact_groupusers', 'cgu_user_ID' ),
+		array( T_('Own Automations'),            'T_automation__automation', 'autm_owner_user_ID' ),
+		array( T_('Automation step states'),     'T_automation__user_state', 'aust_user_ID' ),
+		array( T_('Campaign send statuses'),     'T_email__campaign_send', 'csnd_user_ID' ),
+		array( T_('Email Log'),                  'T_email__log', 'emlog_user_ID' ),
+		array( T_('List subscriptions'),         'T_email__newsletter_subscription', 'enls_user_ID' ),
+		array( T_('Own files'),                  'T_files', 'file_creator_user_ID' ),
+		array( T_('User root files'),            'T_files', 'file_root_ID', 'file_root_type = "user"' ),
+		array( T_('Own file Links'),             'T_links', 'link_creator_user_ID' ),
+		array( T_('Edited file Links'),          'T_links', 'link_lastedit_user_ID' ),
+		array( T_('User file Links'),            'T_links', 'link_usr_ID' ),
+		array( T_('File link votes'),            'T_links__vote', 'lvot_user_ID' ),
+		array( T_('Own Polls'),                  'T_polls__question', 'pqst_owner_user_ID' ),
+		array( T_('Poll answers'),               'T_polls__answer', 'pans_user_ID' ),
+		array( T_('Sessions'),                   'T_sessions', 'sess_user_ID' ),
+		array( T_('System log'),                 'T_syslog', 'slg_user_ID' ),
 	);
 
 	// Display the merging actions:
 	echo '<ul>';
 	foreach( $merge_config as $mc )
 	{	// Print out a merging log of each db column separately:
-		echo '<li>'.sprintf( $mc[0], $merging_user_login, $remaining_user_login ).'...';
+		echo '<li>'.sprintf( T_('Moving "%s" data from %s to %s'), $mc[0], $merging_user_login, $remaining_user_login ).'...';
 		evo_flush();
 
 		// Execute a merging query:
 		// NOTE: We use here the IGNORE modifier in order to avoid error of duplicate entries:
 		$affected_rows = $DB->query( 'UPDATE IGNORE '.$mc[1].'
 			  SET '.$mc[2].' = '.$remaining_User->ID.'
-			WHERE '.$mc[2].' = '.$merging_User->ID );
+			WHERE '.$mc[2].' = '.$merging_User->ID.( isset( $mc[3] ) ? ' AND '.$mc[3] : '' ) );
+		// Also we should delete all data which cannot be merged above before of IGNORE option:
+		$DB->query( 'DELETE FROM '.$mc[1].'
+			WHERE '.$mc[2].' = '.$merging_User->ID.( isset( $mc[3] ) ? ' AND '.$mc[3] : '' ) );
 
 		if( $mc[1] == 'T_links' && $mc[2] == 'link_usr_ID' )
 		{	// Also move the files from merging user folder to remaining user folder:
@@ -5544,12 +5777,14 @@ function merge_users( $merging_user_ID, $remaining_user_ID )
 
 		echo '</li>';
 	}
-	echo '</ul>';
 
-	// Button to merge and delete the user:
-	echo '<a href="'.$admin_url.'?ctrl=user&amp;user_tab=activity&amp;action=delete_all_userdata&amp;user_ID='.$merging_user_ID.'&amp;'.url_crumb( 'user' ).'" class="btn btn-danger">'.sprintf( T_('Delete User %s'), $merging_User->get( 'login' ) ).'</a>';
-	// Button to cancel the merging:
-	echo ' <a href="'.$admin_url.'?ctrl=users&amp;tab3=duplicates" class="btn btn-default">'.T_('Close').'</a>';
+	// Delete the merging user from DB completely:
+	echo '<li>'.sprintf( T_('Deleting user %s'), $merging_user_login ).'...';
+	evo_flush();
+	echo $merging_User->dbdelete() ? T_('OK') : T_('Failed');
+	echo '.</li>';
+
+	echo '</ul>';
 
 		echo '</div>'; // END OF panel-body
 	echo '</div>'; // END OF panel
@@ -5570,9 +5805,9 @@ function user_reports_results( & $reports_Results, $params = array() )
 		'th' => T_('Date and time'),
 		'order' => 'urep_datetime',
 		'default_dir' => 'D',
-		'th_class' => 'nowrap',
-		'td_class' => 'shrinkwrap',
-		'td' => '<span class="date">%mysql2localedatetime( #urep_datetime# )%</span>',
+		'th_class' => 'shrinkwrap',
+		'td_class' => 'timestamp',
+		'td' => '%mysql2localedatetime_spans( #urep_datetime# )%',
 	);
 
 	$reports_Results->cols[] = array(
@@ -5697,6 +5932,8 @@ function users_results_block( $params = array() )
 			'display_btn_tags'     => false,
 			'force_check_user'     => false,
 			'where_duplicate_email' => false,
+			'display_btn_delspam'  => false,
+			'display_delspam_info' => false,
 		), $params );
 
 	global $current_User;
@@ -5877,7 +6114,7 @@ function users_results_block( $params = array() )
 		echo_userlist_automation_js();
 	}
 
-	if( $params['display_newsletter'] && is_logged_in() && $current_User->check_perm( 'emails', 'edit' ) && $UserList->result_num_rows > 0 && ! empty( $UserList->filters['newsletter'] ) )
+	if( $params['display_newsletter'] && is_logged_in() && $current_User->check_perm( 'emails', 'edit' ) && $UserList->result_num_rows > 0 )
 	{	// Button to change users of email campaign OR Create new email campaign for current selection:
 		load_funcs( 'email_campaigns/model/_emailcampaign.funcs.php' );
 		if( $edited_EmailCampaign = & get_session_EmailCampaign() )
@@ -5895,10 +6132,42 @@ function users_results_block( $params = array() )
 			$campaign_ID_param = '';
 		}
 
-		$user_list_buttons[] = '<a href="'.$admin_url.'?ctrl=campaigns&amp;action='.$campaign_action.$campaign_ID_param.'&amp;newsletter='.$UserList->filters['newsletter'].'&amp;'.url_crumb( 'campaign' ).'"'
+		$user_list_buttons[] = '<a '
+			.( empty( $UserList->filters['newsletter'] )
+				? 'onclick="alert( \''.TS_('Please select a subsription list first!').'\');return false"'
+				: 'href="'.$admin_url.'?ctrl=campaigns&amp;action='.$campaign_action.$campaign_ID_param.'&amp;newsletter='.$UserList->filters['newsletter'].'&amp;'.url_crumb( 'campaign' ).'"' )
 			.' class="btn '.$campaign_button_class.'">'
 				.format_to_output( $campaign_button_text )
 			.'</a>';
+	}
+
+	if( is_logged_in() && $current_User->check_perm( 'users', 'edit' ) && $UserList->result_num_rows > 0 )
+	{	// Buttons and info to delete spammers:
+		if( $params['display_btn_delspam'] )
+		{	// Button to go to list with confirmation before spammers deleting:
+			$user_list_buttons[] = '<br><a href="'.$admin_url.'?ctrl=users&amp;action=spammers" class="btn btn-danger">'
+					.format_to_output( T_('Delete spammers...') )
+				.'</a>';
+		}
+		if( $params['display_delspam_info'] )
+		{	// Info and button to confirm to delete spammers:
+			$SQL = new SQL( 'Get a count of deleting spammers per each group' );
+			$SQL->SELECT( 'grp_name, COUNT( user_ID ) AS num_users' );
+			$SQL->FROM( 'T_users' );
+			$SQL->FROM_add( 'LEFT JOIN T_groups ON user_grp_ID = grp_ID' );
+			$SQL->WHERE( 'user_ID IN ( '.$DB->quote( $UserList->filters['users'] ).' )' );
+			$SQL->ORDER_BY( 'grp_ID' );
+			$SQL->GROUP_BY( 'user_grp_ID' );
+			$user_num_groups = $DB->get_results( $SQL );
+			echo '<ul>';
+			foreach( $user_num_groups as $user_num_group )
+			{
+				echo '<li>'.sprintf( T_('Delete %d users from group %s'), intval( $user_num_group->num_users ), $user_num_group->grp_name ).'</li>';
+			}
+			echo '</ul>';
+			// Display to delete the selected users as spammers completely:
+			echo '<a href="'.$admin_url.'?ctrl=users&amp;action=delete_spammers&amp;users='.rawurlencode( implode( ',', $UserList->filters['users'] ) ).'&amp;'.url_crumb( 'users' ).'" class="btn btn-danger">'.T_('Delete spammers NOW!').'</a>';
+		}
 	}
 
 	if( count( $user_list_buttons ) )
@@ -5991,7 +6260,7 @@ function users_results( & $UserList, $params = array() )
 			'viewed_user'        => false,
 		), $params );
 
-	if( $UserList->filters['group'] != -1 )
+	if( $UserList->filters['group'] > -1 || $UserList->check_filter_query( 'group', -1, '>' ) )
 	{ // List is grouped
 
 		/*
@@ -6346,9 +6615,11 @@ function users_results( & $UserList, $params = array() )
 			);
 	}
 
-	$filter_reported = param( 'reported', 'integer' );
-	if( $params['display_reported'] && $filter_reported )
-	{ // Filter is set to 'Reported users'
+	if( $params['display_reported'] &&
+	    isset( $UserList->filters ) &&
+	    ( ! empty( $UserList->filters['reported'] ) && ( empty( $UserList->filters['filter_query'] ) || $UserList->check_filter_query( 'report_count', 0, '>' ) ) )
+	  )
+	{ // Filter is set to 'Reported users' or selected to "Report count"
 		$userlist_col_reputaion = array(
 				'th' => T_('Rep'),
 				'th_class' => 'shrinkwrap small',
@@ -6400,7 +6671,7 @@ function users_results( & $UserList, $params = array() )
 				'th_class' => 'shrinkwrap',
 				'td_class' => 'center nowrap',
 				'order' => 'csnd_status',
-				'td' => '%user_td_campaign_status( #csnd_status# )%'
+				'td' => '%user_td_campaign_status( #csnd_status#, #csnd_emlog_ID# )%'
 			);
 	}
 
@@ -6409,7 +6680,7 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Send date'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'timestamp compact_data',
+				'td_class' => 'timestamp',
 				'order' => 'csnd_last_sent_ts',
 				'default_dir' => 'D',
 				'td' => '%user_td_emlog_date( #csnd_last_sent_ts# )%',
@@ -6421,7 +6692,7 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Last opened'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'timestamp compact_data',
+				'td_class' => 'timestamp',
 				'order' => 'csnd_last_open_ts',
 				'default_dir' => 'D',
 				'td' => '%user_td_emlog_date( #csnd_last_open_ts# )%',
@@ -6430,7 +6701,7 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Last clicked'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'timestamp compact_data',
+				'td_class' => 'timestamp',
 				'order' => 'csnd_last_click_ts',
 				'default_dir' => 'D',
 				'td' => '%user_td_emlog_date( #csnd_last_click_ts# )%',
@@ -6486,10 +6757,10 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Subscribed'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'center nowrap',
+				'td_class' => 'timestamp',
 				'order' => 'enls_subscribed_ts',
 				'default_dir' => 'D',
-				'td' => '%mysql2localedatetime( #enls_subscribed_ts# )%',
+				'td' => '%mysql2localedatetime_spans( #enls_subscribed_ts# )%',
 			);
 	}
 
@@ -6498,10 +6769,10 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Unsubscribed'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'center nowrap',
+				'td_class' => 'timestamp',
 				'order' => 'enls_unsubscribed_ts',
 				'default_dir' => 'D',
-				'td' => '%mysql2localedatetime( #enls_unsubscribed_ts# )%',
+				'td' => '%mysql2localedatetime_spans( #enls_unsubscribed_ts# )%',
 			);
 	}
 
@@ -6510,10 +6781,10 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Last sent'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'center nowrap',
+				'td_class' => 'timestamp',
 				'order' => 'enls_last_sent_manual_ts',
 				'default_dir' => 'D',
-				'td' => '%mysql2localedatetime( #enls_last_sent_manual_ts# )%',
+				'td' => '%mysql2localedatetime_spans( #enls_last_sent_manual_ts# )%',
 			);
 	}
 
@@ -6522,7 +6793,7 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Last opened'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'timestamp compact_data',
+				'td_class' => 'timestamp',
 				'order' => 'enls_last_open_ts',
 				'default_dir' => 'D',
 				'td' => '%user_td_emlog_date( #enls_last_open_ts# )%',
@@ -6534,7 +6805,7 @@ function users_results( & $UserList, $params = array() )
 		$UserList->cols[] = array(
 				'th' => T_('Last clicked'),
 				'th_class' => 'shrinkwrap',
-				'td_class' => 'timestamp compact_data',
+				'td_class' => 'timestamp',
 				'order' => 'enls_last_click_ts',
 				'default_dir' => 'D',
 				'td' => '%user_td_emlog_date( #enls_last_click_ts# )%',
@@ -7215,8 +7486,10 @@ function user_td_orgstatus( $user_ID, $org_ID, $is_accepted )
 /**
  * Get user campaign status
  */
-function user_td_campaign_status( $csnd_status )
+function user_td_campaign_status( $csnd_status, $csnd_emlog_ID = NULL )
 {
+	global $current_User, $admin_url;
+
 	switch( $csnd_status )
 	{
 		case 'ready_to_send':
@@ -7229,7 +7502,14 @@ function user_td_campaign_status( $csnd_status )
 			return T_('Sent');
 
 		case 'send_error':
-			return T_('Send error');
+			if( $current_User->check_perm( 'emails', 'view', true ) && ! empty( $csnd_emlog_ID ) )
+			{
+				return '<a href="'.get_dispctrl_url( 'email', 'tab=sent&amp;emlog_ID='.$csnd_emlog_ID ).'">'.T_('Send error').'</a>';
+			}
+			else
+			{
+				return T_('Send error');
+			}
 
 		case 'skipped':
 			return T_('Skipped');
@@ -7483,4 +7763,54 @@ function get_PasswordDriver( $driver_code = '' )
 	return $PasswordDriver;
 }
 
+
+/**
+ * Get IDs of users which are mentioned in the given content
+ *
+ * @param string Type of content: 'item', 'comment'
+ * @param string Content
+ * @param array Exclude users by ID
+ * @return array User IDs
+ */
+function get_mentioned_user_IDs( $type, $content, $exclude_user_IDs = NULL )
+{
+	switch( $type )
+	{
+		case 'item':
+			$setting_name = 'notify_post_mentioned';
+			$default_setting_name = 'def_notify_post_mentioned';
+			break;
+
+		case 'comment':
+			$setting_name = 'notify_comment_mentioned';
+			$default_setting_name = 'def_notify_comment_mentioned';
+			break;
+
+		default:
+			debug_die( 'Unknown type "'.$type.'" for function '.__FUNCTION__ );
+	}
+
+	if( preg_match_all( '/(^|[\s\t\n\r>,])@([A-Za-z0-9_\.]+)/', $content, $mentioned_logins ) )
+	{	// At least one mentioned user login is found in the given content:
+		global $Settings, $DB;
+
+		$mentioned_SQL = new SQL( 'Get the notify users when they are mentioned in new '.$type );
+		$mentioned_SQL->SELECT( 'user_ID' );
+		$mentioned_SQL->FROM( 'T_users' );
+		$mentioned_SQL->FROM_add( 'LEFT JOIN T_users__usersettings ON uset_user_ID = user_ID AND uset_name = '.$DB->quote( $setting_name ) );
+		// Also get users with default enabled setting:
+		$mentioned_sql_where = $Settings->get( $default_setting_name ) ? ' OR uset_value IS NULL' : '';
+		$mentioned_SQL->WHERE( '( uset_value = "1"'.$mentioned_sql_where.' )' );
+		$mentioned_SQL->WHERE_and( 'user_login IN ( '.$DB->quote( $mentioned_logins[2] ).' )' );
+		if( ! empty( $exclude_user_IDs ) )
+		{	// Set except moderators condition. Exclude moderators who already got a notification email:
+			$mentioned_SQL->WHERE_and( 'user_ID NOT IN ( '.$DB->quote( $exclude_user_IDs ).' )' );
+		}
+
+		return $DB->get_col( $mentioned_SQL );
+	}
+
+	// Return an empty array if no mentioned user is found in the given content:
+	return array();
+}
 ?>
